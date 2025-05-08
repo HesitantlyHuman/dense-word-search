@@ -3,6 +3,7 @@ from typing import List, Self
 import string
 from dataclasses import dataclass, field
 
+from datatypes import GridState
 
 from util import convert_matrix_to_letters, convert_letters_to_matrix
 
@@ -19,31 +20,6 @@ def default_letter_list_factory():
 class _Node:
     children: List[Self | None] = field(default_factory=default_letter_list_factory)
     path: List[int] | None = None
-
-    # def add(self, string: List[int]):
-    #     node = self
-    #     for char in string:
-    #         if node.children[char] is None:
-    #             node.children[char] = _Node()
-    #         node = node.children[char]
-
-    # def get(self, string: List[int]):
-    #     node = self
-    #     for char in string:
-    #         node = node.children[char]
-    #         if node is None:
-    #             return None
-
-    #     return node
-
-    # def contains(self, string: List[int]) -> bool:
-    #     node = self
-    #     for char in string:
-    #         node = node.children[char]
-    #         if node is None:
-    #             return False
-
-    #     return True
 
     def depth(self) -> int:
         child_depths = [child.depth() for child in self.children if child is not None]
@@ -83,13 +59,18 @@ class WordTrie:
             node = node.children[char]
         node.path = word.copy()
 
-    def get_valid(self, slice: List[int]) -> List[List[int]] | None:
+    def get_valid_words(self, slice: List[int]) -> List[List[int]] | None:
         nodes = [(0, self.root)]
-        output = [None if value != 26 else set() for value in slice]
-        idxs_to_set = [idx for idx in range(len(output)) if slice[idx] == 26]
+        output = [None if value != GridState.OPEN else set() for value in slice]
+        idxs_to_set = [
+            idx for idx in range(len(output)) if slice[idx] == GridState.OPEN
+        ]
 
-        for current_depth, entry in enumerate(slice):
-            if entry == 26:
+        for current_index, entry in enumerate(slice):
+            if len(nodes) == 0:
+                break
+
+            if entry == GridState.OPEN:
                 new_nodes = []
                 for offset, node in nodes:
                     new_nodes.extend(
@@ -107,31 +88,16 @@ class WordTrie:
                     if node.children[entry] is not None
                 ]
 
-            depth_contains_terminating_node = False
             for offset, node in nodes:
                 if node.path is not None:
                     # We have a terminal word at this node, update our valid values
                     path_length = len(node.path)
                     for idx in idxs_to_set:
-                        if offset <= idx and idx - offset < path_length:
-                            output[idx].add(node.path[idx - offset])
+                        if offset <= idx and offset + path_length > idx:
+                            output[idx].add((tuple(node.path), idx - offset - 1))
 
-                        # if idx == 2 and node.path[idx - offset] == 1:
-                        #     print(convert_matrix_to_letters(node.path))
-
-                    depth_contains_terminating_node = True
-
-            if depth_contains_terminating_node:
-                nodes.append(
-                    (current_depth + 1, self.root)
-                )  # We could start a new word at the next idx
-
-            if len(nodes) == 0:
-                return None
-
-        for idx in idxs_to_set:
-            if len(output[idx]) == 0:
-                return None
+            # Since we could start a new word here, add the root node
+            nodes.append((current_index, self.root))
 
         return output
 
@@ -153,9 +119,15 @@ if __name__ == "__main__":
     trie = WordTrie()
     print(f"Created trie with depth {trie.root.depth()}")
 
-    print(
-        trie.get_valid(convert_letters_to_matrix(np.array(["b", "o", "{", "y", "b"])))
+    words = trie.get_valid_words(
+        convert_letters_to_matrix(np.array(["b", "o", "{", "y", "b"]))
     )
+    print(words)
+    for word, offset in words[2]:
+        a = -np.ones(5)
+        for idx, value in enumerate(word):
+            a[offset + idx] = value
+        print(convert_matrix_to_letters(a))
 
     # while True:
     #     to_check = input("Does the trie have?:")
