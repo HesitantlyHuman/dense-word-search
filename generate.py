@@ -1,21 +1,23 @@
+from typing import Set, Tuple
+
 import numpy as np
 
-from tqdm import tqdm
-
 from dataclasses import dataclass
-
 from trie import WordTrie
+from util import convert_matrix_to_letters, all_matrix_slices, all_matrix_slices_at
 
-from util import convert_matrix_to_letters
+from datatypes import GridState
 
 
 @dataclass
 class WordSearch:
-    word_inclusion_mask: np.ndarray
-    word_search_grid: np.ndarray
+    word_grid: np.ndarray
+    words: Set[str]
 
 
 # TODO: update this so that we stop when we get to an excluded entry
+# TODO: update this to only generate one slice for each direction, since the Trie handles reversibility
+# TODO: change this to just take the array, or something. We don't actually need to do this for every location, since the Trie function returns values for every entry in the given slice. Each slice of the array only needs to be given once. But we do need to split on empty entries, so maybe some custom slicer function? But we don't want to store all of the word lists, only the best so far, so maybe recalculating things is fine?
 def slice_directions(arr, x, y, max_length=18):
     max_rows, max_cols = arr.shape
 
@@ -110,15 +112,78 @@ def generate_options(
     return selected_location, valid_choices[selected_location]
 
 
-def solve(initial: WordSearch, trie: WordTrie) -> WordSearch | None:
-    # First, we need to figure out valid choices for each of our unchosen locations
-    for _ in range(20):
-        current_grid = initial.word_search_grid
-        next_location, options = generate_options(
-            initial.word_search_grid, initial.word_inclusion_mask, trie
-        )
-        current_grid[next_location] = options[0]
-        print(convert_matrix_to_letters(current_grid))
+def calculate_grid_coverage(
+    word_search_grid: np.ndarray, trie: WordTrie
+) -> Tuple[np.ndarray, Set[str]]:
+    # Calculate which locations of the grid are already contained in a word, and which initial words we have
+    coverage_grid = np.zeros_like(word_search_grid, dtype=bool)
+    words = set()
+
+    for indices, slice in all_matrix_slices(word_search_grid):
+        slice_coverage, slice_words = trie.coverage(slice)
+        coverage_grid[indices] = coverage_grid[indices] | slice_coverage
+        words.update(slice_words)
+
+    return coverage_grid, words
+
+
+def fill_open_backtracking(
+    word_grid: np.ndarray, coverage: np.ndarray, trie: WordTrie
+) -> np.ndarray | None:
+    return None
+
+
+def fill_uncovered_backtracking(
+    word_grid: np.ndarray, coverage: np.ndarray, trie: WordTrie
+) -> np.ndarray | None:
+    # First, identify all uncovered preset letters
+    is_uncovered = (word_grid != GridState.OPEN) & (coverage == False)
+
+    # If we have already covered all of the preset letters, then we can simply start the next backtracking step
+    if np.all(is_uncovered == False):
+        return fill_open_backtracking(word_grid, coverage, trie)
+
+    best_location = None
+    best_location_value = 0
+    best_location_options = None
+
+    # Now, iterate over the uncovered preset letter locations and find the most promising position
+    for x, y in zip(*np.where(is_uncovered)):
+        current_options = set()
+        print(x, y)
+        for indices, slice in all_matrix_slices_at(word_grid, x, y):
+            # Ignore slices that are full, or are not long enough (>= 3)
+            if len(slice) < 3 or np.all(slice != GridState.OPEN):
+                continue
+            valid_words = trie.get_valid_words(slice)
+            index_in_slice = np.where((indices[0] == x) & (indices[1] == y))[0][0]
+            valid_words = valid_words[index_in_slice]
+
+            for word, slice_position in valid_words:
+                # Now we need to score this word
+                word_length = len(word)
+                word_indices = (
+                    indices[0][slice_position : slice_position + word_length],
+                    indices[1][slice_position : slice_position + word_length],
+                )
+                word_coverage = np.sum(is_uncovered[word_indices])
+
+                print(word)
+                print(word_coverage)
+                asdf
+
+
+def solve(word_grid: np.ndarray, trie: WordTrie) -> WordSearch | None:
+    initial_coverage, initial_words = calculate_grid_coverage(word_grid, trie)
+
+    filled_grid = fill_uncovered_backtracking(word_grid, initial_coverage, trie)
+    if filled_grid is None:
+        return None
+
+    final_coverage, final_words = calculate_grid_coverage(filled_grid)
+    if not np.all(final_coverage):
+        raise RuntimeError("Should not be possible!")  # TODO: better error
+    return WordSearch(filled_grid, final_words)
 
 
 if __name__ == "__main__":
@@ -132,7 +197,7 @@ if __name__ == "__main__":
         [
             [26, 8, 26, 26, 11],
             [26, 26, 14, 26, 26],
-            [21, 26, 26, 26, 4],
+            [21, 3, 14, 1, 4],
             [26, 26, 24, 26, 14],
             [26, 20, 26, 26, 26],
         ],
@@ -148,4 +213,5 @@ if __name__ == "__main__":
         ],
         dtype=bool,
     )
-    solve(WordSearch(word_inclusion_mask=inclusion_mask, word_search_grid=grid), trie)
+    print(convert_matrix_to_letters(grid))
+    solve(grid, trie)
