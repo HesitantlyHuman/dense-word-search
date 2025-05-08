@@ -2,7 +2,7 @@ import numpy as np
 
 
 def convert_matrix_to_letters(matrix: np.ndarray) -> np.ndarray:
-    letter_matrix = np.vectorize(lambda x: chr(x + 97))(matrix)
+    letter_matrix = np.vectorize(lambda x: chr(x + 97))(matrix.astype(int))
     return letter_matrix
 
 
