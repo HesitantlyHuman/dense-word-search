@@ -68,11 +68,20 @@ class WordTrie:
         node.path = word.copy()
         node.reverse = reverse
 
-    def get_valid_words(self, slice: List[int]) -> List[List[int]] | None:
+    # TODO: allow for some scoring function, lets us just keep the best K word options.
+    # Otherwise, we run out of memory too fast. Hmmmm.... I mean that is nice, but if
+    # we use a generator, then we don't really need to store much... except we need to
+    # score it at some point...
+    def get_valid_words(
+        self, slice: List[int], target_index: str
+    ) -> List[List[int]] | None:
+        starting_index = max(0, target_index - self.depth())
+        ending_index = min(len(slice), target_index + self.depth())
         nodes = [(0, self.root)]
         output = [set() for _ in slice]
 
-        for current_index, entry in enumerate(slice):
+        for current_index in range(starting_index, ending_index):
+            entry = slice[current_index]
             if len(nodes) == 0:
                 break
 
@@ -94,16 +103,18 @@ class WordTrie:
                     if node.children[entry] is not None
                 ]
 
-            for offset, node in nodes:
-                if node.path is not None:
-                    # We have a terminal word at this node, update our valid values
-                    path_length = len(node.path)
-                    for idx in range(len(output)):
-                        if offset <= idx and offset + path_length > idx:
-                            output[idx].add((tuple(node.path), offset))
+            if current_index >= target_index:
+                for offset, node in nodes:
+                    if node.path is not None:
+                        # We have a terminal word at this node, update our valid values
+                        path_length = len(node.path)
+                        for idx in range(len(output)):
+                            if offset <= idx and offset + path_length > idx:
+                                output[idx].add((tuple(node.path), offset))
 
             # Since we could start a new word here, add the root node
-            nodes.append((current_index + 1, self.root))
+            if current_index < target_index:
+                nodes.append((current_index + 1, self.root))
 
         return output
 
@@ -136,59 +147,7 @@ class WordTrie:
 
 
 if __name__ == "__main__":
-    import time
-    import random
-
-    import numpy as np
-
-    # with open("word_lists/english.txt") as f:
-    #     word_list = f.readlines()
-
-    # for word in word_list:
-    #     word = word.strip().lower()
-    #     if not check(word):
-    #         print(f"Didn't find {word}")
-
     trie = WordTrie()
     print(f"Created trie with depth {trie.root.depth()}")
 
-    # words = trie.get_valid_words(
-    #     convert_letters_to_matrix(np.array(["b", "o", "{", "y", "b"]))
-    # )
-    # print(words)
-    # for word, offset in words[2]:
-    #     a = -np.ones(5)
-    #     for idx, value in enumerate(word):
-    #         a[offset + idx] = value
-    #     print(convert_matrix_to_letters(a))
-
-    print(trie.coverage(convert_letters_to_matrix(np.array(["b", "o", "y", "{", "b"]))))
-    print(trie.coverage(convert_letters_to_matrix(np.array(["b", "y", "d", "o", "b"]))))
-
-    # while True:
-    #     to_check = input("Does the trie have?:")
-    #     print(check(to_check))
-
-    # performance_test = []
-    # N_EXAMPLES = 1_000_000
-
-    # with open("word_lists/english.txt") as f:
-    #     word_list = f.readlines()
-
-    # word_list = [
-    #     string_to_alphabet_positions(word.strip().lower()) for word in word_list
-    # ]
-
-    # for _ in range(N_EXAMPLES):
-    #     word = random.choice(word_list)
-    #     length = random.randint(1, len(word))
-    #     performance_test.append(word[:length])
-
-    # start_time = time.time()
-    # for fragment in performance_test:
-    #     trie.contains(fragment)
-    # end_time = time.time()
-
-    # print(
-    #     f"Lookup took {(end_time - start_time) / (N_EXAMPLES / 1_000_000)}ms per fragment"
-    # )
+    trie.get_valid_words([GridState.OPEN for _ in range(10)], 3)
