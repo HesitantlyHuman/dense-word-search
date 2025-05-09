@@ -60,16 +60,15 @@ def fill_open_backtracking(
     best_location_options = None
 
     # Now, iterate over the uncovered preset letter locations and find the most promising position
-    for x, y in zip(*np.where(is_open)):
+    for x, y in tqdm(zip(*np.where(is_open))):
         current_options = []
 
         for indices, slice in all_matrix_slices_at(word_grid, x, y):
             # Ignore slices that are full, or are not long enough (>= 3)
             if len(slice) < 3 or np.all(slice != GridState.OPEN):
                 continue
-            valid_words = trie.get_valid_words(slice)
             index_in_slice = np.where((indices[0] == x) & (indices[1] == y))[0][0]
-            valid_words = valid_words[index_in_slice]
+            valid_words = trie.get_valid_words(slice, index_in_slice)
 
             for word, slice_position in valid_words:
                 # Now we need to score this word
@@ -145,24 +144,26 @@ def fill_uncovered_backtracking(
     for x, y in zip(*np.where(is_uncovered)):
         current_options = []
 
-        for indices, slice in all_matrix_slices_at(word_grid, x, y):
-            # Ignore slices that are full, or are not long enough (>= 3)
+        for slice_indices, slice in all_matrix_slices_at(word_grid, x, y):
+            # Ignore slices that are full, or are not long enough (>= 3) # TODO: move this to the slicing generator
             if len(slice) < 3 or np.all(slice != GridState.OPEN):
                 continue
-            valid_words = trie.get_valid_words(slice)  # TODO: make this a generator
-            index_in_slice = np.where((indices[0] == x) & (indices[1] == y))[0][0]
-            valid_words = valid_words[index_in_slice]
+            index_in_slice = np.where(
+                (slice_indices[0] == x) & (slice_indices[1] == y)
+            )[0][
+                0
+            ]  # TODO: move this to the all_matrix_slices_at function, since we don't need to calculate it as expensively there
 
-            for word, slice_position in valid_words:
-                # Now we need to score this word
+            def _score_word(
+                word: List[int],
+                word_indices: Tuple[List[int], List[int]],
+                word_rank: int,
+            ) -> float:
                 word_length = len(word)
-                word_indices = (
-                    indices[0][slice_position : slice_position + word_length],
-                    indices[1][slice_position : slice_position + word_length],
-                )
                 word_coverage = np.sum(is_uncovered[word_indices])
                 word_intersection = np.sum(coverage[word_indices])
                 fills_open = np.sum(open_spots[word_indices])
+
                 # At this point, we mainly care about covering the uncovered
                 # preset letters, but we will slightly prefer longer words to
                 # break ties, as well as words which intersect with other words
@@ -173,7 +174,11 @@ def fill_uncovered_backtracking(
                     + 0.1 * fills_open
                     + 0.1 * word_length
                 )
+                return word_score
 
+            for word, word_indices, word_score in trie.get_valid_words(
+                slice, slice_indices, index_in_slice, scoring_function=_score_word
+            ):
                 current_options.append((word, word_indices, word_score))
 
         if len(current_options) == 0:
@@ -194,11 +199,11 @@ def fill_uncovered_backtracking(
     # words by their scores, and try each one at a time, moving to the next if
     # we end up backtracking.
     best_location_options.sort(key=lambda x: x[2], reverse=True)
-    for word, indices, _ in best_location_options:
+    for word, word_indices, _ in best_location_options:
         # Place the word
         new_word_grid, new_coverage = word_grid.copy(), coverage.copy()
-        new_word_grid[indices] = word
-        new_coverage[indices] = True
+        new_word_grid[word_indices] = word
+        new_coverage[word_indices] = True
 
         solved_word_grid = fill_uncovered_backtracking(
             new_word_grid, new_coverage, trie, progress_bar=progress_bar
@@ -245,6 +250,7 @@ if __name__ == "__main__":
     # np.inf Not a valid location
 
     trie = WordTrie()
+    print(f"Constructed trie...")
 
     # grid = np.array(
     #     [
@@ -257,6 +263,6 @@ if __name__ == "__main__":
     #     ],
     #     dtype=int,
     # )
-    grid = np.ones((9, 9)) * 26
+    grid = np.ones((5, 5), dtype=int) * 26
     print(convert_matrix_to_letters(grid))
     print(solve(grid, trie))

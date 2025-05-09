@@ -1,4 +1,4 @@
-from typing import List, Self, Tuple, Set
+from typing import List, Self, Tuple, Set, Callable
 
 import numpy as np
 
@@ -39,11 +39,11 @@ class _Node:
 class WordTrie:
     """
     Provides functionality for getting valid letter states based on a slice.
-    Supports both forwards and backwards english letters.
+    Supports both forwards and backwards embeddings of the provided word list.
     """
 
     def __init__(self):
-        with open("word_lists/english.txt") as f:
+        with open("word_lists/coca.txt") as f:
             word_list = f.readlines()
 
         self.root = _Node()
@@ -62,6 +62,10 @@ class WordTrie:
     def add(self, word: List[int], reverse: bool = False):
         node = self.root
         for char in word:
+            if char > 25:
+                raise ValueError(
+                    f"Recevied character '{convert_list_to_string([char])}' as part of word '{convert_list_to_string(word)}', which is unsupported!"
+                )
             if node.children[char] is None:
                 node.children[char] = _Node()
             node = node.children[char]
@@ -73,12 +77,19 @@ class WordTrie:
     # we use a generator, then we don't really need to store much... except we need to
     # score it at some point...
     def get_valid_words(
-        self, slice: List[int], target_index: str
+        self,
+        slice: List[int],
+        indices: Tuple[List[int], List[int]],
+        target_index: str,
+        scoring_function: Callable[
+            [List[int], Tuple[List[int], List[int]], int], float
+        ] = None,
+        k: int = 1000,
     ) -> List[List[int]] | None:
         starting_index = max(0, target_index - self.depth())
         ending_index = min(len(slice), target_index + self.depth())
         nodes = [(0, self.root)]
-        output = [set() for _ in slice]
+        output = set()
 
         for current_index in range(starting_index, ending_index):
             entry = slice[current_index]
@@ -107,10 +118,7 @@ class WordTrie:
                 for offset, node in nodes:
                     if node.path is not None:
                         # We have a terminal word at this node, update our valid values
-                        path_length = len(node.path)
-                        for idx in range(len(output)):
-                            if offset <= idx and offset + path_length > idx:
-                                output[idx].add((tuple(node.path), offset))
+                        output.add((tuple(node.path), offset))
 
             # Since we could start a new word here, add the root node
             if current_index < target_index:
@@ -150,4 +158,5 @@ if __name__ == "__main__":
     trie = WordTrie()
     print(f"Created trie with depth {trie.root.depth()}")
 
-    trie.get_valid_words([GridState.OPEN for _ in range(10)], 3)
+    valid_words = trie.get_valid_words([GridState.OPEN for _ in range(20)], 10)
+    print(len(valid_words))
