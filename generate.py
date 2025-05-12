@@ -152,7 +152,7 @@ def fill_uncovered_backtracking(
                 (slice_indices[0] == x) & (slice_indices[1] == y)
             )[0][
                 0
-            ]  # TODO: move this to the all_matrix_slices_at function, since we don't need to calculate it as expensively there
+            ]  # TODO: move this to the all_matrix_slices_at function, since we don't need to calculate it as expensively over there
 
             def _score_word(
                 word: List[int],
