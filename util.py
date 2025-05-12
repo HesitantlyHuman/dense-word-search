@@ -64,16 +64,20 @@ def all_matrix_slices(
 
 def all_matrix_slices_at(
     arr: np.ndarray, x: int, y: int
-) -> Generator[Tuple[np.ndarray, np.ndarray], None, None]:
+) -> Generator[Tuple[np.ndarray, np.ndarray, int], None, None]:
     rows, cols = arr.shape
 
     # Horizontal slice at row x
     idx_row = (np.full(cols, x), np.arange(cols))
-    yield idx_row, arr[idx_row]
+    slice = arr[idx_row]
+    if np.any(slice == GridState.OPEN):
+        yield idx_row, slice, x
 
     # Vertical slice at column y
     idx_col = (np.arange(rows), np.full(rows, y))
-    yield idx_col, arr[idx_col]
+    slice = arr[idx_col]
+    if np.any(slice == GridState.OPEN):
+        yield idx_col, slice, y
 
     # Diagonal: top-left to bottom-right through (x, y)
     offset = y - x
@@ -82,7 +86,9 @@ def all_matrix_slices_at(
     length = min(rows - i_start, cols - j_start)
     i = np.arange(i_start, i_start + length)
     j = np.arange(j_start, j_start + length)
-    yield (i, j), arr[i, j]
+    slice = arr[i, j]
+    if np.any(slice == GridState.OPEN):
+        yield (i, j), slice, min(x, y)
 
     # Diagonal: top-right to bottom-left through (x, y)
     offset = y + x
@@ -91,4 +97,6 @@ def all_matrix_slices_at(
     length = min(rows - i_start, j_start + 1)
     i = np.arange(i_start, i_start + length)
     j = np.arange(j_start, j_start - length, -1)
-    yield (i, j), arr[i, j]
+    slice = arr[i, j]
+    if np.any(slice == GridState.OPEN):
+        yield (i, j), slice, min(rows - x, cols - y)

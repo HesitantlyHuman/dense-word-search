@@ -1,5 +1,6 @@
-from typing import List, Self, Tuple, Set, Callable
+from typing import List, Self, Tuple, Set, Callable, Generator
 
+import heapq
 import numpy as np
 
 import string
@@ -72,24 +73,12 @@ class WordTrie:
         node.path = word.copy()
         node.reverse = reverse
 
-    # TODO: allow for some scoring function, lets us just keep the best K word options.
-    # Otherwise, we run out of memory too fast. Hmmmm.... I mean that is nice, but if
-    # we use a generator, then we don't really need to store much... except we need to
-    # score it at some point...
     def get_valid_words(
-        self,
-        slice: List[int],
-        indices: Tuple[List[int], List[int]],
-        target_index: str,
-        scoring_function: Callable[
-            [List[int], Tuple[List[int], List[int]], int], float
-        ] = None,
-        k: int = 1000,
-    ) -> List[List[int]] | None:
+        self, slice: List[int], target_index: int
+    ) -> Generator[Tuple[List[int], Tuple[int, int]], None, None]:
         starting_index = max(0, target_index - self.depth())
         ending_index = min(len(slice), target_index + self.depth())
         nodes = [(0, self.root)]
-        output = set()
 
         for current_index in range(starting_index, ending_index):
             entry = slice[current_index]
@@ -114,17 +103,49 @@ class WordTrie:
                     if node.children[entry] is not None
                 ]
 
+            # We could finish a word here
             if current_index >= target_index:
                 for offset, node in nodes:
                     if node.path is not None:
-                        # We have a terminal word at this node, update our valid values
-                        output.add((tuple(node.path), offset))
+                        yield node.path, (offset, current_index)
 
             # Since we could start a new word here, add the root node
             if current_index < target_index:
                 nodes.append((current_index + 1, self.root))
 
-        return output
+    def get_top_k_valid_words(
+        self,
+        slice: List[int],
+        indices: Tuple[List[int], List[int]],
+        target_index: str,
+        scoring_function: Callable[
+            [List[int], Tuple[List[int], List[int]], int], float
+        ] = None,
+        k: int = 100,
+    ) -> List[List[int]] | None:
+        k_largest = []
+
+        for word, (start, stop) in self.get_valid_words(slice, target_index):
+            word_indices = (
+                indices[0][start:stop],
+                indices[1][start:stop],
+            )
+            score = scoring_function(
+                word, word_indices, 0
+            )  # TODO: add support for word rank
+
+            if len(k_largest) < k:
+                heapq.heappush(k_largest, (score, word, word_indices))
+            elif score > k_largest[0][0]:
+                try:
+                    heapq.heappushpop(
+                        k_largest, (score, word, word_indices)
+                    )  # TODO: causes errors when we have the same word twice at different locations, maybe just add an index, and then filter it out?
+                except ValueError as e:
+                    print(score, word, word_indices)
+                    raise e
+
+        return k_largest  # If we want to sort later, we can
 
     def coverage(self, slice: List[int]) -> Tuple[np.ndarray, Set[str]]:
         coverage = np.zeros(len(slice), dtype=bool)
