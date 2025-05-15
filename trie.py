@@ -42,6 +42,7 @@ class TrieNode:
         return max(child_depths) + 1
 
 
+# TODO: what if it's faster to just do a list of the words, at the size of our dictionary?
 class WordTrie:
     """
     Provides functionality for getting valid letter states based on a slice.
@@ -97,38 +98,33 @@ class WordTrie:
             if node.children[char] is None:
                 node.children[char] = TrieNode()
             node = node.children[char]
-        node.path = TriePath(word.copy(), reverse, word_rank)
+        if node.path is None or node.path.word_rank < word_rank:
+            node.path = TriePath(word.copy(), reverse, word_rank)
 
     def get_valid_words(
         self, slice: List[int], target_index: int
     ) -> Generator[Tuple[List[int], float, Tuple[int, int]], None, None]:
         max_children = len(self.root.children)
+        slice_size = len(slice)
         minimum_word_length, maximum_word_length = self.word_limits()
 
         starting_index = max(0, target_index - maximum_word_length)
-        ending_index = min(len(slice), target_index + maximum_word_length)
+        ending_index = min(slice_size, target_index + maximum_word_length)
 
-        # TODO: get this to work
-        if target_index - starting_index > ending_index - target_index - 1:
-            offset_iterator = range(
-                ending_index - 1,
-                max(target_index, starting_index + minimum_word_length - 1) - 1,
-                -1,
-            )
-            slice_direction = -1
-            ending_index, starting_index = starting_index, ending_index
-        else:
-            offset_iterator = range(
-                starting_index,
-                min(target_index, ending_index - minimum_word_length) + 1,
-            )
-            slice_direction = 1
-
-        # offset_iterator = range(
-        #     starting_index,
-        #     min(target_index, ending_index - minimum_word_length) + 1,
-        # )
-        # slice_direction = 1
+        if target_index - starting_index > ending_index - target_index:
+            reversed_slice = slice.copy()
+            if isinstance(reversed_slice, np.ndarray):
+                reversed_slice = np.flip(reversed_slice)
+            else:
+                reversed_slice.reverse()
+            reversed_target = slice_size - 1 - target_index
+            for word, value, (start, stop) in self.get_valid_words(
+                reversed_slice, reversed_target
+            ):
+                word = word.copy()
+                word.reverse()
+                yield word, value, (slice_size - stop, slice_size - start)
+            return
 
         def _get_all_starting_at(starting_offset: int):
             tree_path = [
@@ -145,14 +141,21 @@ class WordTrie:
             slice_index = starting_offset
             slice_entry = slice[slice_index]
             while True:
-                # Check if we have reached the end of our slice
-                if slice_index >= ending_index or current_child_index >= max_children:
+                # Check if we have exceeded the valid children of this node
+                if (
+                    current_child_index >= max_children
+                    or slice_entry != GridState.OPEN
+                    and slice_entry != current_child_index
+                ):
                     if current_tree_index == 0:
                         return
                     current_tree_index -= 1
                     current_node, current_child_index = tree_path[current_tree_index]
+                    tree_path[current_tree_index] = (
+                        None  # TODO: hopefully remove this after debugging
+                    )
                     current_child_index += 1
-                    slice_index -= slice_direction
+                    slice_index -= 1
                     slice_entry = slice[slice_index]
                     # Since we have updated our node, we want to restart the loop
                     continue
@@ -161,36 +164,51 @@ class WordTrie:
                 if current_node.children[current_child_index] is not None and (
                     slice_entry == GridState.OPEN or slice_entry == current_child_index
                 ):
-                    # If it does, we will enter
-                    tree_path[current_tree_index] = (current_node, current_child_index)
-                    current_tree_index += 1
-                    current_node = current_node.children[current_child_index]
-                    current_child_index = (
-                        0 if slice_entry == GridState.OPEN else slice_entry
-                    )
+                    next_node = current_node.children[current_child_index]
 
-                    if current_node.path is not None and slice_index >= target_index:
-                        yield current_node.path.word, current_node.path.word_rank, (
-                            starting_offset,
-                            slice_index + 1,
-                        )
+                    if next_node.path is not None:
+                        if slice_index >= target_index:
+                            yield next_node.path.word, next_node.path.word_rank, (
+                                starting_offset,
+                                slice_index + 1,
+                            )
 
-                    if slice_index + 1 >= ending_index:
-                        current_tree_index -= 1
-                        current_node, current_child_index = tree_path[
-                            current_tree_index
-                        ]
+                    # If our next step will take us out of the slice boundaries,
+                    # then we will not step forward, and instead continue to
+                    # cycle through siblings of this node.
+                    next_slice_index = slice_index + 1
+                    if (
+                        next_slice_index >= ending_index
+                        or next_slice_index <= starting_index - 1
+                    ):
                         current_child_index += 1
                     else:
-                        slice_index += slice_direction
+                        # Append to our history
+                        tree_path[current_tree_index] = (
+                            current_node,
+                            current_child_index,
+                        )
+                        current_tree_index += 1
+
+                        # Get the next node
+                        current_node = current_node.children[current_child_index]
+
+                        # Get the next states, and figure out where to start our child index from
+                        slice_index = next_slice_index
                         slice_entry = slice[slice_index]
+                        current_child_index = (
+                            0 if slice_entry == GridState.OPEN else slice_entry
+                        )
 
                     # Since we have updated our node, we want to restart the loop
                     continue
 
                 current_child_index += 1
 
-        for starting_offset in offset_iterator:
+        for starting_offset in range(
+            starting_index,
+            min(target_index, ending_index - minimum_word_length) + 1,
+        ):
             yield from _get_all_starting_at(starting_offset)
 
     def get_top_k_valid_words(
@@ -264,15 +282,19 @@ if __name__ == "__main__":
     print(f"Created trie with depth {trie.root.depth()}")
 
     def _score_word(
-        word: List[int],
         word_indices: Tuple[List[int], List[int]],
         word_rank: int,
         random_value: float,
     ) -> float:
         return word_rank + random_value
 
-    words = trie.get_valid_words([GridState.OPEN for _ in range(6)], target_index=4)
-    print(len(list(words)))
+    # words = trie.get_top_k_valid_words(
+    #     [GridState.OPEN for _ in range(40)],
+    #     ([0 for _ in range(40)], [i for i in range(40)]),
+    #     target_index=20,
+    #     scoring_function=_score_word,
+    # )
+    # print(words)
 
     # cProfile.run(
     #     """words = trie.get_top_k_valid_words(
@@ -289,11 +311,11 @@ if __name__ == "__main__":
     #         """words = trie.get_top_k_valid_words(
     #     [GridState.OPEN for _ in range(40)],
     #     ([0 for _ in range(40)], [i for i in range(40)]),
-    #     target_index=20,
+    #     target_index=35,
     #     scoring_function=_score_word,
     # )""",
     #         globals={"trie": trie, "GridState": GridState, "_score_word": _score_word},
-    #         number=30,
+    #         number=20,
     #     )
-    #     / 30,
+    #     / 20,
     # )

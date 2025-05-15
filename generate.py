@@ -233,9 +233,9 @@ def solve(
         word_score = (
             word_coverage
             + 0.6 * word_intersection
-            - 0.1 * fills_open
+            - 1.5 * fills_open
             + 2 * word_rank
-            + 0.1 * random_value
+            + random_value
         )
         return word_score
 
@@ -303,6 +303,9 @@ if __name__ == "__main__":
     # 26 Unset / Needs to be solved for
     # np.inf Not a valid location
 
+    # TODO: the way we are doing this right now means that we don't backtrack up through the open cover stuff
+    # when we hit a snag and need to backtrack
+
     trie = WordTrie()
     print(f"Constructed trie of depth {trie.depth()} from {len(trie)} words...")
 
@@ -317,6 +320,6 @@ if __name__ == "__main__":
     #     ],
     #     dtype=int,
     # )
-    grid = np.ones((9, 9), dtype=int) * 26
+    grid = np.ones((13, 13), dtype=int) * 26
     print(convert_matrix_to_letters(grid))
     print(solve(grid, trie))
