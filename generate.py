@@ -1,4 +1,4 @@
-from typing import Set, Tuple, List
+from typing import Set, Tuple, List, Callable
 
 import numpy as np
 from tqdm import tqdm
@@ -50,61 +50,80 @@ def at_least_one_option_per_spot(
     return True
 
 
-def fill_open_backtracking(
+def fill_grid_backtracking(
+    to_fill: np.ndarray,
     word_grid: np.ndarray,
     coverage: np.ndarray,
     trie: WordTrie,
     progress_bar: tqdm = None,
-) -> np.ndarray | None:
+    max_checked_locations: int = 50,
+    word_score_function: Callable[
+        [np.ndarray, np.ndarray, Tuple[List[int], List[int]], float], float
+    ] = None,
+) -> Tuple[np.ndarray, np.ndarray] | None:
     if progress_bar:
         num_filled = np.sum(word_grid != GridState.OPEN)
         progress_bar.n = num_filled
         progress_bar.refresh()
 
-    # If we have filled the grid, then we are done
-    if np.all(coverage):
-        return word_grid
+    # Identify our targets to fill (any of the to_fill which is still uncovered)
+    to_fill_left = to_fill & ~coverage
 
-    # Identify all open letters
-    is_open = word_grid == GridState.OPEN
+    # If we have filled all of the to_fill spots, then we are done
+    if not np.any(to_fill_left):
+        return (word_grid, coverage)
 
-    best_location = None
+    # Otherwise, we need to pick some of our to_fill spots for us to iterate over and check. Each of these are candidates for our choice to fill words from.
+    candidate_locations = list(zip(*np.where(to_fill_left)))
+    np.random.shuffle(candidate_locations)
+    candidate_locations = candidate_locations[:max_checked_locations]
+
+    # Prepare the scoring function with up to date information about the current grid state
+    open = word_grid == GridState.OPEN
+
+    if word_score_function:
+
+        def _score(
+            word_indices: Tuple[List[int], List[int]],
+            word_rank: float,
+            random_value: float,
+        ) -> float:
+            return word_score_function(
+                coverage, open, word_indices, word_rank, random_value
+            )
+
+    else:
+
+        def _score(
+            word_indices: Tuple[List[int], List[int]],
+            word_rank: float,
+            random_value: float,
+        ) -> float:
+            return random_value
+
     best_location_score = 0
     best_location_options = None
 
-    # Now, iterate over the uncovered preset letter locations and find the most
-    # promising position
-    for x, y in zip(*np.where(is_open)):
+    for x, y in candidate_locations[:max_checked_locations]:
         current_options = []
 
         for slice_indices, slice, index_in_slice in all_matrix_slices_at(
             word_grid, x, y
         ):
-
-            def _score_word(
-                word: List[int],
-                word_indices: Tuple[List[int], List[int]],
-                word_rank: int,
-            ) -> float:
-                word_intersection = np.sum(coverage[word_indices])
-                fills_open = np.sum(is_open[word_indices])
-
-                # If placing the word would not change our board, then we don't care
-                if fills_open == 0:
-                    return 0
-
-                # Now, we want to prioritize intersecting with existing words
-                word_score = word_intersection + 0.5 * fills_open
-                return word_score
+            if len(slice) < trie.word_limits()[0] or np.all(slice != GridState.OPEN):
+                continue
 
             current_options.extend(
                 trie.get_top_k_valid_words(
-                    slice, slice_indices, index_in_slice, scoring_function=_score_word
+                    slice,
+                    slice_indices,
+                    index_in_slice,
+                    scoring_function=_score,
                 )
             )
 
         if len(current_options) == 0:
-            # If we can't fill this spot with anything, then we need to backtrack
+            # If we can't fill this spot with anything, then we need to backtrack, since nothing we do will change that.
             return None
 
         current_location_score = sum([score for score, _, _ in current_options])
@@ -116,19 +135,18 @@ def fill_open_backtracking(
                 and current_location_score > best_location_score
             )
         ):
-            best_location = (x, y)
             best_location_options = current_options
             best_location_score = current_location_score
 
-    if best_location is None or len(best_location_options) == 0:
-        return None
+    # Now we know that there must be a best location
 
     # Now that we have found the most promising position, we will order our
     # words by their scores, and try each one at a time, moving to the next if
     # we end up backtracking.
     best_location_options.sort(key=lambda x: x[0], reverse=True)
     for _, word, indices in best_location_options:
-        if np.sum(is_open[indices]) == 0:
+        # If this option would not change our current board, then we don't need to place it, since that won't progress our solution.
+        if np.sum(~coverage[indices]) == 0:
             continue
 
         # Place the word
@@ -139,120 +157,25 @@ def fill_open_backtracking(
         if not at_least_one_option_per_spot(new_word_grid, new_coverage, trie):
             continue
 
-        solved_word_grid = fill_open_backtracking(
-            new_word_grid, new_coverage, trie, progress_bar=progress_bar
+        backtracking_result = fill_grid_backtracking(
+            to_fill=to_fill,
+            word_grid=new_word_grid,
+            coverage=new_coverage,
+            trie=trie,
+            progress_bar=progress_bar,
+            max_checked_locations=max_checked_locations,
+            word_score_function=word_score_function,
         )
-        if solved_word_grid is not None:
-            return solved_word_grid
+        if backtracking_result is not None:
+            return backtracking_result
 
     return None
 
 
-def fill_uncovered_backtracking(
-    word_grid: np.ndarray,
-    coverage: np.ndarray,
-    trie: WordTrie,
-    progress_bar: tqdm = None,
-) -> np.ndarray | None:
-    if progress_bar:
-        num_filled = np.sum(word_grid != GridState.OPEN)
-        progress_bar.n = num_filled
-        progress_bar.refresh()
-
-    # First, identify all uncovered preset letters
-    is_uncovered = (word_grid != GridState.OPEN) & (coverage == False)
-    open_spots = word_grid == GridState.OPEN
-
-    # If we have already covered all of the preset letters, then we can simply start the
-    # next backtracking step
-    if np.all(is_uncovered == False):
-        return fill_open_backtracking(word_grid, coverage, trie, progress_bar)
-
-    best_location = None
-    best_location_score = 0
-    best_location_options = None
-
-    # Now, iterate over the uncovered preset letter locations and find the most
-    # promising position
-    for x, y in zip(*np.where(is_uncovered)):
-        current_options = []
-
-        for slice_indices, slice, index_in_slice in all_matrix_slices_at(
-            word_grid, x, y
-        ):
-
-            def _score_word(
-                word: List[int],
-                word_indices: Tuple[List[int], List[int]],
-                word_rank: int,
-            ) -> float:
-                word_coverage = np.sum(is_uncovered[word_indices])
-                word_intersection = np.sum(coverage[word_indices])
-                fills_open = np.sum(open_spots[word_indices])
-
-                # If placing the word would not change our board, then we don't care
-                if fills_open == 0:
-                    return 0
-
-                # At this point, we mainly care about covering the uncovered
-                # preset letters, but we will slightly prefer words which intersect with
-                # other words and words which fill open spots, to break ties
-                word_score = word_coverage + 0.6 * word_intersection - 0.1 * fills_open
-                return word_score
-
-            current_options.extend(
-                trie.get_top_k_valid_words(
-                    slice, slice_indices, index_in_slice, scoring_function=_score_word
-                )
-            )
-
-        if len(current_options) == 0:
-            # If we can't fill this spot with anything, then we need to backtrack
-            return None
-
-        current_location_score = sum([score for score, _, _ in current_options])
-        if (
-            best_location_options is None
-            or len(current_options) < len(best_location_options)
-            or (
-                len(current_options) == len(best_location_options)
-                and current_location_score > best_location_score
-            )
-        ):
-            best_location = (x, y)
-            best_location_options = current_options
-            best_location_score = current_location_score
-
-    if best_location is None or len(best_location_options) == 0:
-        return None
-
-    # Now that we have found the most promising position, we will order our
-    # words by their scores, and try each one at a time, moving to the next if
-    # we end up backtracking.
-    best_location_options.sort(key=lambda x: x[0], reverse=True)
-    for _, word, word_indices in best_location_options:
-        if np.sum(open_spots[word_indices]) == 0:
-            continue
-
-        # Place the word
-        new_word_grid, new_coverage = word_grid.copy(), coverage.copy()
-        new_word_grid[word_indices] = word
-        new_coverage[word_indices] = True
-
-        if not at_least_one_option_per_spot(new_word_grid, new_coverage, trie):
-            continue
-
-        solved_word_grid = fill_uncovered_backtracking(
-            new_word_grid, new_coverage, trie, progress_bar=progress_bar
-        )
-        if solved_word_grid is not None:
-            return solved_word_grid
-
-    return None
-
-
-# TODO: do the seeding with actual words, so that we don't have issues filling them
-def seed_grid(word_grid: np.ndarray, density: float = 0.10) -> np.ndarray:
+# TODO: we should only seed up to the target density, even if there are already
+# other entries in the grid. We also should avoid overwriting those entries if
+# they are there.
+def seed_grid(word_grid: np.ndarray, density: float = 0.075) -> np.ndarray:
     width, height = word_grid.shape
     num_samples = int(word_grid.size * density)
     rx, ry = np.random.randint(0, width, num_samples), np.random.randint(
@@ -268,7 +191,9 @@ def seed_grid(word_grid: np.ndarray, density: float = 0.10) -> np.ndarray:
 
 
 def solve(
-    word_grid: np.ndarray, trie: WordTrie, progress_bar: bool = True
+    word_grid: np.ndarray,
+    trie: WordTrie,
+    progress_bar: bool = True,
 ) -> WordSearch | None:
     if progress_bar:
         progress_bar = tqdm(total=word_grid.size)
@@ -281,17 +206,90 @@ def solve(
 
     initial_coverage, _ = calculate_grid_coverage(seeded_grid, trie)
 
-    filled_grid = fill_uncovered_backtracking(
+    # First fill targets are the uncovered, but already set options
+    is_uncovered = (seeded_grid != GridState.OPEN) & (initial_coverage == False)
+
+    if progress_bar:
+        progress_bar.set_description("Covering uncovered")
+
+    def _uncovered_scoring_fn(
+        coverage: np.ndarray,
+        open: np.ndarray,
+        word_indices: Tuple[List[int], List[int]],
+        word_rank: float,
+        random_value: float,
+    ) -> float:
+        word_coverage = np.sum(~coverage[word_indices])
+        word_intersection = np.sum(coverage[word_indices])
+        fills_open = np.sum(open[word_indices])
+
+        # If placing the word would not change our board, then we don't care
+        if fills_open == 0:
+            return 0
+
+        # At this point, we mainly care about covering the uncovered
+        # preset letters, but we will slightly prefer words which intersect with
+        # other words and words which fill open spots, to break ties
+        word_score = (
+            word_coverage
+            + 0.6 * word_intersection
+            - 0.1 * fills_open
+            + 2 * word_rank
+            + 0.1 * random_value
+        )
+        return word_score
+
+    uncovered_result = fill_grid_backtracking(
+        is_uncovered,
         seeded_grid,
         initial_coverage,
         trie,
-        progress_bar=progress_bar if progress_bar else None,
+        progress_bar,
+        word_score_function=_uncovered_scoring_fn,
     )
-    if filled_grid is None:
+    if uncovered_result is None:
         return None
+    partially_completed, partial_coverage = uncovered_result
 
     if progress_bar:
-        progress_bar.n = word_grid.size
+        progress_bar.set_description("Covering open")
+
+    # Now, we need to fill the remaining open spots
+    def _open_scoring_fn(
+        coverage: np.ndarray,
+        open: np.ndarray,
+        word_indices: Tuple[List[int], List[int]],
+        word_rank: float,
+        random_value: float,
+    ) -> float:
+        word_intersection = np.sum(coverage[word_indices])
+        fills_open = np.sum(open[word_indices])
+
+        # If placing the word would not change our board, then we don't care
+        if fills_open == 0:
+            return 0
+
+        # Now, we want to prioritize intersecting with existing words,
+        # and focus on words which are more frequent, if possible
+        word_score = (
+            word_intersection + 0.5 * fills_open + 2 * word_rank + 0.2 * random_value
+        )
+        return word_score
+
+    fill_result = fill_grid_backtracking(
+        ~partial_coverage,
+        partially_completed,
+        partial_coverage,
+        trie,
+        progress_bar,
+        word_score_function=_open_scoring_fn,
+    )
+    if fill_result is None:
+        return None
+    filled_grid, _ = fill_result
+
+    if progress_bar:
+        progress_bar.n = filled_grid.size
         progress_bar.refresh()
 
     final_coverage, final_words = calculate_grid_coverage(filled_grid, trie)
@@ -306,7 +304,7 @@ if __name__ == "__main__":
     # np.inf Not a valid location
 
     trie = WordTrie()
-    print(f"Constructed trie...")
+    print(f"Constructed trie of depth {trie.depth()} from {len(trie)} words...")
 
     # grid = np.array(
     #     [
@@ -319,6 +317,6 @@ if __name__ == "__main__":
     #     ],
     #     dtype=int,
     # )
-    grid = np.ones((15, 15), dtype=int) * 26
+    grid = np.ones((9, 9), dtype=int) * 26
     print(convert_matrix_to_letters(grid))
     print(solve(grid, trie))

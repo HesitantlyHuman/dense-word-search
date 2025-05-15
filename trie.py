@@ -24,11 +24,16 @@ def default_letter_list_factory():
 
 
 @dataclass(slots=True)
-class _Node:
+class TriePath:
+    word: List[int]
+    is_reverse: bool
+    word_rank: float
+
+
+@dataclass(slots=True)
+class TrieNode:
     children: List[Self | None] = field(default_factory=default_letter_list_factory)
-    # TODO: maybe merge these into one object
-    path: List[int] | None = None
-    reverse: bool | None = None
+    path: TriePath = None
 
     def depth(self) -> int:
         child_depths = [child.depth() for child in self.children if child is not None]
@@ -43,24 +48,46 @@ class WordTrie:
     Supports both forwards and backwards embeddings of the provided word list.
     """
 
-    def __init__(self):
+    def __init__(self, word_length_limits: Tuple[int, int] = (4, 10)):
         with open("word_lists/coca.txt") as f:
             word_list = f.readlines()
 
-        self.root = _Node()
+        smallest_word = 100
+        biggest_word = 0
+
+        filtered_words = []
         for word in word_list:
             word = word.strip().lower()
+            if word_length_limits and (
+                len(word) < word_length_limits[0] or len(word) > word_length_limits[1]
+            ):
+                continue
+            smallest_word = min(smallest_word, len(word))
+            biggest_word = max(biggest_word, len(word))
+            filtered_words.append(word)
+        self._word_limits = (smallest_word, biggest_word)
+        self._num_entries = len(filtered_words)
+
+        self.root = TrieNode()
+        for word_placement, word in enumerate(filtered_words):
+            word_rank = 1 - (word_placement / self._num_entries)
             word = string_to_alphabet_positions(word)
-            self.add(word)
+            self.add(word, word_rank)
             word.reverse()
-            self.add(word, reverse=True)
+            self.add(word, word_rank, reverse=True)
 
         self._depth = self.root.depth()
+
+    def __len__(self) -> int:
+        return self._num_entries
 
     def depth(self) -> int:
         return self._depth
 
-    def add(self, word: List[int], reverse: bool = False):
+    def word_limits(self) -> Tuple[int, int]:
+        return self._word_limits
+
+    def add(self, word: List[int], word_rank: float, reverse: bool = False):
         node = self.root
         for char in word:
             if char > 25:
@@ -68,57 +95,40 @@ class WordTrie:
                     f"Recevied character '{convert_list_to_string([char])}' as part of word '{convert_list_to_string(word)}', which is unsupported!"
                 )
             if node.children[char] is None:
-                node.children[char] = _Node()
+                node.children[char] = TrieNode()
             node = node.children[char]
-        node.path = word.copy()
-        node.reverse = reverse
-
-    # def get_valid_words(
-    #     self, slice: List[int], target_index: int
-    # ) -> Generator[Tuple[List[int], Tuple[int, int]], None, None]:
-    #     starting_index = max(0, target_index - self.depth())
-    #     ending_index = min(len(slice), target_index + self.depth())
-    #     nodes = [(0, self.root)]
-
-    #     for current_index in range(starting_index, ending_index):
-    #         entry = slice[current_index]
-    #         if not nodes:
-    #             return
-
-    #         if entry == GridState.OPEN:
-    #             new_nodes = []
-    #             for offset, node in nodes:
-    #                 new_nodes.extend(
-    #                     [
-    #                         (offset, child)
-    #                         for child in node.children
-    #                         if child is not None
-    #                     ]
-    #                 )
-    #             nodes = new_nodes
-    #         else:
-    #             nodes = [
-    #                 (offset, node.children[entry])
-    #                 for offset, node in nodes
-    #                 if node.children[entry] is not None
-    #             ]
-
-    #         # We could finish a word here
-    #         if current_index >= target_index:
-    #             for offset, node in nodes:
-    #                 if node.path is not None:
-    #                     yield node.path, (offset, current_index)
-
-    #         # Since we could start a new word here, add the root node
-    #         if current_index < target_index:
-    #             nodes.append((current_index + 1, self.root))
+        node.path = TriePath(word.copy(), reverse, word_rank)
 
     def get_valid_words(
         self, slice: List[int], target_index: int
-    ) -> Generator[Tuple[List[int], Tuple[int, int]], None, None]:
-        starting_index = max(0, target_index - self.depth())
-        ending_index = min(len(slice), target_index + self.depth())
+    ) -> Generator[Tuple[List[int], float, Tuple[int, int]], None, None]:
         max_children = len(self.root.children)
+        minimum_word_length, maximum_word_length = self.word_limits()
+
+        starting_index = max(0, target_index - maximum_word_length)
+        ending_index = min(len(slice), target_index + maximum_word_length)
+
+        # TODO: get this to work
+        if target_index - starting_index > ending_index - target_index - 1:
+            offset_iterator = range(
+                ending_index - 1,
+                max(target_index, starting_index + minimum_word_length - 1) - 1,
+                -1,
+            )
+            slice_direction = -1
+            ending_index, starting_index = starting_index, ending_index
+        else:
+            offset_iterator = range(
+                starting_index,
+                min(target_index, ending_index - minimum_word_length) + 1,
+            )
+            slice_direction = 1
+
+        # offset_iterator = range(
+        #     starting_index,
+        #     min(target_index, ending_index - minimum_word_length) + 1,
+        # )
+        # slice_direction = 1
 
         def _get_all_starting_at(starting_offset: int):
             tree_path = [
@@ -142,7 +152,7 @@ class WordTrie:
                     current_tree_index -= 1
                     current_node, current_child_index = tree_path[current_tree_index]
                     current_child_index += 1
-                    slice_index -= 1
+                    slice_index -= slice_direction
                     slice_entry = slice[slice_index]
                     # Since we have updated our node, we want to restart the loop
                     continue
@@ -160,7 +170,10 @@ class WordTrie:
                     )
 
                     if current_node.path is not None and slice_index >= target_index:
-                        yield current_node.path, (starting_offset, slice_index + 1)
+                        yield current_node.path.word, current_node.path.word_rank, (
+                            starting_offset,
+                            slice_index + 1,
+                        )
 
                     if slice_index + 1 >= ending_index:
                         current_tree_index -= 1
@@ -169,7 +182,7 @@ class WordTrie:
                         ]
                         current_child_index += 1
                     else:
-                        slice_index += 1
+                        slice_index += slice_direction
                         slice_entry = slice[slice_index]
 
                     # Since we have updated our node, we want to restart the loop
@@ -177,12 +190,7 @@ class WordTrie:
 
                 current_child_index += 1
 
-        # TODO: if our target index is at the end, we should start from there
-        # because we will only have to check 1 offset, instead of like 20
-
-        for starting_offset in range(
-            starting_index, min(target_index + 1, ending_index + 1 - 3)
-        ):
+        for starting_offset in offset_iterator:
             yield from _get_all_starting_at(starting_offset)
 
     def get_top_k_valid_words(
@@ -190,23 +198,21 @@ class WordTrie:
         slice: List[int],
         indices: Tuple[List[int], List[int]],
         target_index: str,
-        scoring_function: Callable[
-            [List[int], Tuple[List[int], List[int]], int], float
-        ] = None,
-        k: int = 10,
+        scoring_function: Callable[[Tuple[List[int], List[int]], float], float] = None,
+        k: int = 3,
         max_check: int = 1_000,
     ) -> List[List[int]] | None:
         k_largest = []
 
+        random_values = np.random.random(max_check)
+
         idx = 0
-        for word, (start, stop) in self.get_valid_words(slice, target_index):
+        for word, word_rank, (start, stop) in self.get_valid_words(slice, target_index):
             word_indices = (
                 indices[0][start:stop],
                 indices[1][start:stop],
             )
-            score = scoring_function(
-                word, word_indices, 0
-            )  # TODO: add support for word rank
+            score = scoring_function(word_indices, word_rank, random_values[idx])
 
             if idx < k:
                 heapq.heappush(k_largest, (score, idx, word, word_indices))
@@ -241,10 +247,10 @@ class WordTrie:
             for node_start, node in current_nodes:
                 if node.path is not None:
                     coverage[node_start : current_index + 1] = True
-                    path = node.path.copy()
-                    if node.reverse:
-                        path.reverse()
-                    word = convert_list_to_string(path)
+                    word = node.path.word.copy()
+                    if node.path.is_reverse:
+                        word.reverse()
+                    word = convert_list_to_string(word)
                     words.add(word)
 
         return coverage, words
@@ -261,12 +267,12 @@ if __name__ == "__main__":
         word: List[int],
         word_indices: Tuple[List[int], List[int]],
         word_rank: int,
+        random_value: float,
     ) -> float:
-        word_length = len(word)
-        return word_length
+        return word_rank + random_value
 
-    words = trie.get_valid_words([GridState.OPEN for _ in range(5)], target_index=0)
-    list(words)
+    words = trie.get_valid_words([GridState.OPEN for _ in range(6)], target_index=4)
+    print(len(list(words)))
 
     # cProfile.run(
     #     """words = trie.get_top_k_valid_words(
@@ -287,6 +293,7 @@ if __name__ == "__main__":
     #     scoring_function=_score_word,
     # )""",
     #         globals={"trie": trie, "GridState": GridState, "_score_word": _score_word},
-    #         number=15,
-    #     ),
+    #         number=30,
+    #     )
+    #     / 30,
     # )

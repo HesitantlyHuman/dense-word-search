@@ -70,14 +70,12 @@ def all_matrix_slices_at(
     # Horizontal slice at row x
     idx_row = (np.full(cols, x), np.arange(cols))
     slice = arr[idx_row]
-    if len(slice) >= 3 and np.any(slice == GridState.OPEN):
-        yield idx_row, slice, x
+    yield idx_row, slice, x
 
     # Vertical slice at column y
     idx_col = (np.arange(rows), np.full(rows, y))
     slice = arr[idx_col]
-    if len(slice) >= 3 and np.any(slice == GridState.OPEN):
-        yield idx_col, slice, y
+    yield idx_col, slice, y
 
     # Diagonal: top-left to bottom-right through (x, y)
     offset = y - x
@@ -87,8 +85,7 @@ def all_matrix_slices_at(
     i = np.arange(i_start, i_start + length)
     j = np.arange(j_start, j_start + length)
     slice = arr[i, j]
-    if len(slice) >= 3 and np.any(slice == GridState.OPEN):
-        yield (i, j), slice, min(x, y)
+    yield (i, j), slice, min(x, y)
 
     # Diagonal: bottom-left to top-right through (x, y)
     offset = y + x
@@ -98,8 +95,7 @@ def all_matrix_slices_at(
     i = np.arange(i_start, i_start + length)
     j = np.arange(j_start, j_start - length, -1)
     slice = arr[i, j]
-    if len(slice) >= 3 and np.any(slice == GridState.OPEN):
-        yield (i, j), slice, min(x, cols - y - 1)
+    yield (i, j), slice, min(x, cols - y - 1)
 
 
 if __name__ == "__main__":
