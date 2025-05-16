@@ -12,11 +12,8 @@ from util import (
     convert_matrix_to_letters,
     convert_letters_to_matrix,
     convert_list_to_string,
+    string_to_alphabet_positions,
 )
-
-
-def string_to_alphabet_positions(s):
-    return [ord(char) - ord("a") for char in s if char.isalpha()]
 
 
 def default_letter_list_factory():
@@ -102,15 +99,28 @@ class WordTrie:
             node.path = TriePath(word.copy(), reverse, word_rank)
 
     def get_valid_words(
-        self, slice: List[int], target_index: int
+        self, slice: List[int], blocked: List[bool], target_index: int
     ) -> Generator[Tuple[List[int], float, Tuple[int, int]], None, None]:
         max_children = len(self.root.children)
         slice_size = len(slice)
         minimum_word_length, maximum_word_length = self.word_limits()
 
-        starting_index = max(0, target_index - maximum_word_length)
-        ending_index = min(slice_size, target_index + maximum_word_length)
+        # Narrow in on only the part of the slice which is not blocked
+        previous_blocked = -1
+        next_blocked = slice_size
+        for idx, is_blocked in enumerate(blocked):
+            if is_blocked:
+                if idx > target_index:
+                    next_blocked = min(next_blocked, idx)
+                if idx < target_index:
+                    previous_blocked = max(previous_blocked, idx)
 
+        # Find the possible window that our words might live in
+        starting_index = max(previous_blocked + 1, target_index - maximum_word_length)
+        ending_index = min(next_blocked, target_index + maximum_word_length)
+
+        # If we are closer to the end of our valid word window, reverse it, so that we
+        # don't have to check as many starting locations
         if target_index - starting_index > ending_index - target_index:
             reversed_slice = slice.copy()
             if isinstance(reversed_slice, np.ndarray):
@@ -126,6 +136,8 @@ class WordTrie:
                 yield word, value, (slice_size - stop, slice_size - start)
             return
 
+        # TODO: do not yield entries which include the blocked letter, but also don't include
+        # entries which could include the blocked letter, in the future
         def _get_all_starting_at(starting_offset: int):
             tree_path = [
                 None for _ in range(self.depth())
@@ -287,6 +299,13 @@ if __name__ == "__main__":
         random_value: float,
     ) -> float:
         return word_rank + random_value
+
+    words = trie.get_valid_words(
+        [GridState.OPEN, 2, 4, GridState.OPEN, GridState.OPEN, 8],
+        blocked=[False, False, False, False, False, False],
+        target_index=0,
+    )
+    print(list(words))
 
     # words = trie.get_top_k_valid_words(
     #     [GridState.OPEN for _ in range(40)],

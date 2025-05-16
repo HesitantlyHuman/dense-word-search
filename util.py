@@ -5,6 +5,10 @@ import numpy as np
 from datatypes import GridState
 
 
+def string_to_alphabet_positions(s):
+    return [ord(char) - ord("a") for char in s if char.isalpha()]
+
+
 def convert_list_to_string(list: List[int]) -> str:
     return "".join(
         [

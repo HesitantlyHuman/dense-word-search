@@ -16,6 +16,8 @@ class WordSearch:
     words: Set[str]
 
 
+# TODO: split this into two features
+# TODO: try not to grab words who are completely covered by other words
 def calculate_grid_coverage(
     word_search_grid: np.ndarray, trie: WordTrie
 ) -> Tuple[np.ndarray, Set[str]]:
@@ -175,23 +177,30 @@ def fill_grid_backtracking(
 # TODO: we should only seed up to the target density, even if there are already
 # other entries in the grid. We also should avoid overwriting those entries if
 # they are there.
-def seed_grid(word_grid: np.ndarray, density: float = 0.075) -> np.ndarray:
+def seed_grid(word_grid: np.ndarray, density: float = 0.075) -> np.ndarray | None:
     width, height = word_grid.shape
-    num_samples = int(word_grid.size * density)
-    rx, ry = np.random.randint(0, width, num_samples), np.random.randint(
-        0, height, num_samples
+    current_fill = np.sum(word_grid != GridState.OPEN)
+    num_samples = int((word_grid.size - current_fill) * density)
+    rx, ry = np.random.randint(0, width, num_samples * 5), np.random.randint(
+        0, height, num_samples * 5
     )
-    rv = np.random.randint(0, 26, num_samples)
+    rv = np.random.randint(0, 26, num_samples * 5)
 
     new_word_grid = word_grid.copy()
+    num_placed = 0
     for x, y, v in zip(rx, ry, rv):
-        new_word_grid[x, y] = v
+        if new_word_grid[x, y] == GridState.OPEN:
+            new_word_grid[x, y] = v
+            num_placed += 1
+            if num_placed >= num_samples:
+                return new_word_grid
 
-    return new_word_grid
+    return None
 
 
 def solve(
     word_grid: np.ndarray,
+    blocked: np.ndarray,
     trie: WordTrie,
     progress_bar: bool = True,
 ) -> WordSearch | None:
@@ -206,7 +215,11 @@ def solve(
 
     initial_coverage, _ = calculate_grid_coverage(seeded_grid, trie)
 
-    # First fill targets are the uncovered, but already set options
+    # Ensure that none of our blocked entries have been covered
+    if np.any(initial_coverage & blocked):
+        return None
+
+    # First fill targets are uncovered, but already set options
     is_uncovered = (seeded_grid != GridState.OPEN) & (initial_coverage == False)
 
     if progress_bar:
@@ -235,7 +248,7 @@ def solve(
             + 0.6 * word_intersection
             - 1.5 * fills_open
             + 2 * word_rank
-            + random_value
+            + 2 * random_value
         )
         return word_score
 
@@ -299,6 +312,8 @@ def solve(
 
 
 if __name__ == "__main__":
+    from util import string_to_alphabet_positions
+
     # 0-25 Letters
     # 26 Unset / Needs to be solved for
     # np.inf Not a valid location
@@ -320,6 +335,16 @@ if __name__ == "__main__":
     #     ],
     #     dtype=int,
     # )
-    grid = np.ones((13, 13), dtype=int) * 26
+    grid = np.ones((8, 8), dtype=int) * 26
+    message = "te amo"
+    message = message.replace(" ", "").lower().strip()
+    message_integers = string_to_alphabet_positions(message)
+    print(message_integers)
+    blocked = np.zeros_like(grid)
+    locations = [(0, 1), (3, 4), (4, 5), (7, 2), (0, 6)]
+    locations.sort()
+    for location, value in zip(locations, message_integers):
+        blocked[location] = 1
+        grid[location] = value
     print(convert_matrix_to_letters(grid))
-    print(solve(grid, trie))
+    print(solve(grid, blocked, trie))
