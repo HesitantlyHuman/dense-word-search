@@ -46,7 +46,7 @@ class WordTrie:
     Supports both forwards and backwards embeddings of the provided word list.
     """
 
-    def __init__(self, word_length_limits: Tuple[int, int] = (4, 10)):
+    def __init__(self, word_length_limits: Tuple[int, int] = (3, 10)):
         with open("word_lists/coca.txt") as f:
             word_list = f.readlines()
 
@@ -122,14 +122,24 @@ class WordTrie:
         # If we are closer to the end of our valid word window, reverse it, so that we
         # don't have to check as many starting locations
         if target_index - starting_index > ending_index - target_index:
+            # Reverse slice
             reversed_slice = slice.copy()
             if isinstance(reversed_slice, np.ndarray):
                 reversed_slice = np.flip(reversed_slice)
             else:
                 reversed_slice.reverse()
+            # Reverse blocked
+            reversed_blocked = blocked.copy()
+            if isinstance(reversed_blocked, np.ndarray):
+                reversed_blocked = np.flip(reversed_blocked)
+            else:
+                reversed_blocked.reverse()
+            # Plug in the reversed inputs
             reversed_target = slice_size - 1 - target_index
             for word, value, (start, stop) in self.get_valid_words(
-                reversed_slice, reversed_target
+                slice=reversed_slice,
+                blocked=reversed_blocked,
+                target_index=reversed_target,
             ):
                 word = word.copy()
                 word.reverse()
@@ -226,18 +236,21 @@ class WordTrie:
     def get_top_k_valid_words(
         self,
         slice: List[int],
+        blocked: List[bool],
         indices: Tuple[List[int], List[int]],
         target_index: str,
         scoring_function: Callable[[Tuple[List[int], List[int]], float], float] = None,
-        k: int = 3,
-        max_check: int = 1_000,
+        k: int = 10,
+        max_check: int = 2_000,
     ) -> List[List[int]] | None:
         k_largest = []
 
         random_values = np.random.random(max_check)
 
         idx = 0
-        for word, word_rank, (start, stop) in self.get_valid_words(slice, target_index):
+        for word, word_rank, (start, stop) in self.get_valid_words(
+            slice=slice, blocked=blocked, target_index=target_index
+        ):
             word_indices = (
                 indices[0][start:stop],
                 indices[1][start:stop],
@@ -258,32 +271,62 @@ class WordTrie:
             (score, word, word_indices) for score, _, word, word_indices in k_largest
         ]  # If we want to sort later, we can
 
-    def coverage(self, slice: List[int]) -> Tuple[np.ndarray, Set[str]]:
-        coverage = np.zeros(len(slice), dtype=bool)
-        words = set()
+    def _words_from_slice(
+        self, slice: List[int]
+    ) -> Generator[Tuple[int, TrieNode], None, None]:
         current_nodes = [(0, self.root)]
 
         for current_index, entry in enumerate(slice):
             if entry != GridState.OPEN:
+                # Traverse each of the current valid nodes
                 current_nodes = [
                     (node_start, node.children[entry])
                     for node_start, node in current_nodes
                     if node.children[entry] is not None
                 ]
+            else:
+                # Empty cells stop all current nodes
+                current_nodes = []
 
             current_nodes.append((current_index + 1, self.root))
 
-            # Now, update coverage if we have a word
-            for node_start, node in current_nodes:
+            # Check each of our current tries to see if we have a word
+            # We are going in reverse order so that words that start earlier are
+            # provided afterwards. Words which end later are also provided
+            # afterwards. Both of these properties are useful to the `words`
+            # function
+            for start_position, node in reversed(current_nodes):
                 if node.path is not None:
-                    coverage[node_start : current_index + 1] = True
-                    word = node.path.word.copy()
-                    if node.path.is_reverse:
-                        word.reverse()
-                    word = convert_list_to_string(word)
-                    words.add(word)
+                    # We have found a word
+                    yield start_position, node
 
-        return coverage, words
+    def coverage(self, slice: List[int]) -> np.ndarray:
+        coverage = np.zeros(len(slice), dtype=bool)
+
+        for start, node in self._words_from_slice(slice):
+            coverage[start : start + len(node.path.word)] = True
+
+        return coverage
+
+    def words(self, slice: List[int], trim: bool = True) -> Set[str]:
+        # Get all words in the given slice
+        words = set()
+
+        for _, node in self._words_from_slice(slice):
+            new_word = node.path.word.copy()
+            if node.path.is_reverse:
+                new_word.reverse()
+            new_word = convert_list_to_string(new_word)
+
+            if trim:
+                # Since we have gotten this word after any words which started
+                # after this word and ended before (or right now), we can find
+                # any words that are included in this one easily.
+                words.difference_update({word for word in words if word in new_word})
+
+            words.add(new_word)
+
+        return words
 
 
 if __name__ == "__main__":
@@ -293,19 +336,21 @@ if __name__ == "__main__":
     trie = WordTrie()
     print(f"Created trie with depth {trie.root.depth()}")
 
-    def _score_word(
-        word_indices: Tuple[List[int], List[int]],
-        word_rank: int,
-        random_value: float,
-    ) -> float:
-        return word_rank + random_value
+    words = trie.words(slice=[])
 
-    words = trie.get_valid_words(
-        [GridState.OPEN, 2, 4, GridState.OPEN, GridState.OPEN, 8],
-        blocked=[False, False, False, False, False, False],
-        target_index=0,
-    )
-    print(list(words))
+    # def _score_word(
+    #     word_indices: Tuple[List[int], List[int]],
+    #     word_rank: int,
+    #     random_value: float,
+    # ) -> float:
+    #     return word_rank + random_value
+
+    # words = trie.get_valid_words(
+    #     [GridState.OPEN, 2, 4, GridState.OPEN, GridState.OPEN, 8],
+    #     blocked=[False, False, False, False, False, False],
+    #     target_index=0,
+    # )
+    # print(list(words))
 
     # words = trie.get_top_k_valid_words(
     #     [GridState.OPEN for _ in range(40)],
