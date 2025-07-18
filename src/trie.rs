@@ -10,31 +10,32 @@ struct WordInfo {
 }
 
 const EMPTY: Option<Box<TrieNode>> = None;
+const NUM_LETTERS: usize = 26;
 
 const MIN_WORD: usize = 3;
 const MAX_WORD: usize = 10;
 
 pub struct TrieNode {
-    children: [Option<Box<TrieNode>>; 26],
+    children: [Option<Box<TrieNode>>; NUM_LETTERS],
     word_info: Option<WordInfo>,
 }
 
 impl TrieNode {
     fn new() -> Self {
         TrieNode {
-            children: [EMPTY; 26],
+            children: [EMPTY; NUM_LETTERS],
             word_info: None,
         }
     }
 
-    pub fn build(minimum_word_length: usize, maximum_word_length: usize) -> Result<Self, String> {
+    pub fn build() -> Result<Self, String> {
         let mut root = TrieNode::new();
         // Load and filter words
         let words = include_str!("coca.txt");
         let filtered_words: Vec<&str> = words
             .split("\n")
             .map(|chunk| chunk.trim())
-            .filter(|word| (word.len() > minimum_word_length) & (word.len() < maximum_word_length))
+            .filter(|word| (word.len() > MIN_WORD) & (word.len() < MAX_WORD))
             .collect();
         // Add all of our words
         let num_words = filtered_words.len();
@@ -82,16 +83,39 @@ impl TrieNode {
         depth
     }
 
-    fn get_top_k_valid_words(
-        self,
-        slice: Vec<u8>,
-        blocked: Vec<bool>,
-        indices: (Vec<usize>, Vec<usize>),
+    pub fn get_top_k_valid_words<'a>(
+        &self,
+        slice: &'a [u8],
+        blocked: &'a [bool],
+        indices: (&'a [usize], &'a [usize]),
         target_index: usize,
-        scoring_function: fn((Vec<usize>, Vec<usize>), f32, f32) -> f32,
+        scoring_function: fn((&[usize], &[usize]), f32, f32) -> f32,
         k: u16,
         max_words_to_check: u16,
-    ) -> Vec<(f32, Vec<u8>, (Vec<usize>, Vec<usize>))> {
+    ) -> Vec<(f32, Vec<u8>, (&'a [usize], &'a [usize]))> {
+        let slice_length = slice.len();
+
+        let mut previous_blocked = None;
+        let mut next_blocked = None;
+        for (idx, is_blocked) in blocked.iter().enumerate() {
+            if *is_blocked {
+                if idx < target_index {
+                    previous_blocked = Some(idx);
+                } else if next_blocked.is_none() {
+                    next_blocked = Some(idx);
+                }
+            }
+        }
+
+        let start = previous_blocked
+            .map_or(0, |i| i + 1)
+            .max(target_index.saturating_sub(MAX_WORD));
+        let end = next_blocked
+            .unwrap_or(slice_length)
+            .min(target_index + MAX_WORD);
+
+        println!("{}, {}", start, end);
+
         Vec::new()
     }
 
