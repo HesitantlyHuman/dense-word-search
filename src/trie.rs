@@ -1,39 +1,12 @@
 use std::collections::HashSet;
 
+use crate::consts::OPEN;
+use crate::util::string_to_ints;
+
 struct WordInfo {
     path: Vec<u8>,
     word: String,
     word_rank: f32,
-}
-
-const OPEN: u8 = 255;
-
-fn char_to_int(c: char) -> Result<u8, String> {
-    if c.is_ascii_alphabetic() {
-        Ok(c.to_ascii_lowercase() as u8 - b'a')
-    } else if c == '_' {
-        Ok(OPEN)
-    } else {
-        Err(format!("Invalid character '{}'.", c))
-    }
-}
-
-fn int_to_char(n: &u8) -> Result<char, String> {
-    if *n < 26 {
-        Ok((b'a' + n) as char)
-    } else if *n == OPEN {
-        Ok('_')
-    } else {
-        Err(format!("Invalid integer '{}'.", n))
-    }
-}
-
-fn string_to_ints(s: &str) -> Result<Vec<u8>, String> {
-    s.chars().map(char_to_int).collect()
-}
-
-fn ints_to_string(ints: Vec<u8>) -> Result<String, String> {
-    ints.iter().map(int_to_char).collect()
 }
 
 const EMPTY: Option<Box<TrieNode>> = None;
@@ -41,7 +14,7 @@ const EMPTY: Option<Box<TrieNode>> = None;
 const MIN_WORD: usize = 3;
 const MAX_WORD: usize = 10;
 
-struct TrieNode {
+pub struct TrieNode {
     children: [Option<Box<TrieNode>>; 26],
     word_info: Option<WordInfo>,
 }
@@ -52,6 +25,24 @@ impl TrieNode {
             children: [EMPTY; 26],
             word_info: None,
         }
+    }
+
+    pub fn build(minimum_word_length: usize, maximum_word_length: usize) -> Result<Self, String> {
+        let mut root = TrieNode::new();
+        // Load and filter words
+        let words = include_str!("coca.txt");
+        let filtered_words: Vec<&str> = words
+            .split("\n")
+            .map(|chunk| chunk.trim())
+            .filter(|word| (word.len() > minimum_word_length) & (word.len() < maximum_word_length))
+            .collect();
+        // Add all of our words
+        let num_words = filtered_words.len();
+        for (rank_num, word) in filtered_words.iter().enumerate() {
+            let word_rank = 1.0 - (rank_num as f32 / (num_words - 1) as f32);
+            root.add(word.to_string(), word_rank)?;
+        }
+        Ok(root)
     }
 
     fn _add_one(&mut self, word_list: &Vec<u8>, word: &String, word_rank: f32) {
@@ -80,11 +71,11 @@ impl TrieNode {
         Ok(())
     }
 
-    fn depth(self) -> u8 {
-        let mut depth: u8 = 0;
+    pub fn depth(self) -> u8 {
+        let mut depth: u8 = 1;
         for potential_child in self.children {
             match potential_child {
-                Some(child) => depth = depth.max(child.depth()),
+                Some(child) => depth = depth.max(child.depth() + 1),
                 None => {}
             }
         }
