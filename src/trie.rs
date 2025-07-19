@@ -4,7 +4,7 @@ use crate::consts::OPEN;
 use crate::util::string_to_ints;
 
 struct WordInfo {
-    path: Vec<u8>,
+    path: Vec<usize>,
     word: String,
     word_rank: f32,
 }
@@ -14,6 +14,80 @@ const NUM_LETTERS: usize = 26;
 
 const MIN_WORD: usize = 3;
 const MAX_WORD: usize = 10;
+
+pub struct ValidWordIterator<'a> {
+    starting_index: usize,
+    ending_index: usize,
+    current_starting_index: usize,
+
+    previous_nodes: Vec<(&'a TrieNode, usize)>,
+    current_node: &'a TrieNode,
+    current_node_child: usize,
+
+    slice: &'a [usize],
+    slice_position: usize,
+}
+
+impl<'a> ValidWordIterator<'a> {
+    fn new(
+        node: &'a TrieNode,
+        slice: &'a [usize],
+        starting_index: usize,
+        ending_index: usize,
+    ) -> Self {
+        let current_child = if slice[starting_index] == OPEN {
+            0
+        } else {
+            slice[starting_index]
+        };
+
+        ValidWordIterator {
+            starting_index: starting_index,
+            ending_index: ending_index,
+            current_starting_index: starting_index,
+            previous_nodes: Vec::with_capacity(NUM_LETTERS),
+            current_node: node,
+            current_node_child: current_child,
+            slice: slice,
+            slice_position: starting_index,
+        }
+    }
+}
+
+impl<'a> Iterator for ValidWordIterator<'a> {
+    type Item = (&'a [usize], f32, (usize, usize));
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            // Check if we need to walk up the tree
+            if self.current_node_child >= NUM_LETTERS
+                || (self.slice[self.slice_position] != OPEN
+                    && self.slice[self.slice_position] != self.current_node_child)
+            {
+                // Increment the current starting index, if necessary
+                if self.previous_nodes.len() == 0 {
+                    // Reset with the next starting index
+                    self.current_starting_index += 1;
+                    if self.current_starting_index == self.ending_index {
+                        // Stop, we have found all valid words
+                        return None;
+                    }
+
+                    // previous_nodes is already empty, so the current node will already be correct
+                    self.slice_position = self.current_starting_index;
+                    self.current_node_child = if self.slice[self.slice_position] == OPEN {
+                        0
+                    } else {
+                        self.slice[self.slice_position]
+                    };
+
+                    // Restart the loop, so that we don't try to to the tree walk stuff
+                    continue;
+                }
+            }
+        }
+    }
+}
 
 pub struct TrieNode {
     children: [Option<Box<TrieNode>>; NUM_LETTERS],
@@ -46,7 +120,7 @@ impl TrieNode {
         Ok(root)
     }
 
-    fn _add_one(&mut self, word_list: &Vec<u8>, word: &String, word_rank: f32) {
+    fn _add_one(&mut self, word_list: &Vec<usize>, word: &String, word_rank: f32) {
         let mut current_node = self;
 
         for character in word_list.iter() {
@@ -83,16 +157,12 @@ impl TrieNode {
         depth
     }
 
-    pub fn get_top_k_valid_words<'a>(
+    pub fn get_valid_words<'a>(
         &self,
-        slice: &'a [u8],
+        slice: &'a [usize],
         blocked: &'a [bool],
-        indices: (&'a [usize], &'a [usize]),
         target_index: usize,
-        scoring_function: fn((&[usize], &[usize]), f32, f32) -> f32,
-        k: u16,
-        max_words_to_check: u16,
-    ) -> Vec<(f32, Vec<u8>, (&'a [usize], &'a [usize]))> {
+    ) -> ValidWordIterator {
         let slice_length = slice.len();
 
         let mut previous_blocked = None;
@@ -114,12 +184,47 @@ impl TrieNode {
             .unwrap_or(slice_length)
             .min(target_index + MAX_WORD);
 
+        // TODO: Add reversing logic
+
         println!("{}, {}", start, end);
 
+        (start..=target_index.min(end - MAX_WORD)).flat_map(|starting_index| {
+            let mut previous_nodes = Vec::with_capacity(MAX_WORD);
+            let mut current_node = self;
+            let mut current_child = if slice[starting_index] == OPEN {
+                0
+            } else {
+                slice[starting_index]
+            };
+
+            let mut slice_position = starting_index;
+            let mut slice_entry = slice[slice_position];
+            loop {
+                // Check if we have exceeded the valid children of our current node
+                if current_child >= NUM_LETTERS
+                    || (slice_entry != OPEN && slice_entry != current_child)
+                {}
+            }
+        });
+
+        ValidWordIterator::new(self, slice, 0, 0)
+    }
+
+    pub fn get_top_k_valid_words<'a>(
+        &self,
+        slice: &'a [usize],
+        blocked: &'a [bool],
+        indices: (&'a [usize], &'a [usize]),
+        target_index: usize,
+        scoring_function: fn((&[usize], &[usize]), f32, f32) -> f32,
+        k: u16,
+        max_words_to_check: u16,
+    ) -> Vec<(f32, Vec<u8>, (&'a [usize], &'a [usize]))> {
         Vec::new()
     }
 
-    fn slice_words(self, slice: Vec<u8>) -> HashSet<String> {
+    // TODO: change slice input
+    fn slice_words(self, slice: Vec<usize>) -> HashSet<String> {
         let mut current_nodes = vec![(0, &self)];
         let mut words: HashSet<String> = HashSet::new();
 
@@ -158,7 +263,8 @@ impl TrieNode {
         words
     }
 
-    fn slice_coverage(self, slice: Vec<u8>) -> Vec<bool> {
+    // TODO: change slice input
+    fn slice_coverage(self, slice: Vec<usize>) -> Vec<bool> {
         let mut current_nodes = vec![(0, &self)];
         let mut coverage: Vec<bool> = Vec::with_capacity(slice.len());
 

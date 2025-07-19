@@ -1,1 +1,1 @@
-pub const OPEN: u8 = 255;
+pub const OPEN: usize = 255;
