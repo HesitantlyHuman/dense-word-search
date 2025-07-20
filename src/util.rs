@@ -24,6 +24,6 @@ pub fn string_to_ints(s: &str) -> Result<Vec<usize>, String> {
     s.chars().map(char_to_int).collect()
 }
 
-fn ints_to_string(ints: Vec<usize>) -> Result<String, String> {
+pub fn ints_to_string(ints: Vec<usize>) -> Result<String, String> {
     ints.iter().map(int_to_char).collect()
 }

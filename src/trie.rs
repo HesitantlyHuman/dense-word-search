@@ -41,8 +41,10 @@ impl<'a> ValidWordIterator<'a> {
             slice[starting_index]
         };
 
+        println!("{}", starting_index);
+
         ValidWordIterator {
-            starting_index: starting_index,
+            starting_index: starting_index, // TODO: do we need this value?
             ending_index: ending_index,
             current_starting_index: starting_index,
             previous_nodes: Vec::with_capacity(NUM_LETTERS),
@@ -55,7 +57,7 @@ impl<'a> ValidWordIterator<'a> {
 }
 
 impl<'a> Iterator for ValidWordIterator<'a> {
-    type Item = (&'a [usize], f32, (usize, usize));
+    type Item = (Vec<usize>, f32, (usize, usize));
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -81,10 +83,58 @@ impl<'a> Iterator for ValidWordIterator<'a> {
                         self.slice[self.slice_position]
                     };
 
-                    // Restart the loop, so that we don't try to to the tree walk stuff
+                    // Restart the loop, so that we don't try to do the tree walk stuff
                     continue;
                 }
+
+                // Walk up the tree and step to next child
+                (self.current_node, self.current_node_child) = self.previous_nodes.pop().unwrap();
+                self.current_node_child += 1;
+
+                // Step back in the slice
+                self.slice_position -= 1;
+
+                // Restart the loop
+                continue;
             }
+
+            // Check if there is a valid child at the current node child
+            if (self.slice[self.slice_position] == OPEN
+                || self.slice[self.slice_position] == self.current_node_child)
+            {
+                if let Some(next_node) = &self.current_node.children[self.current_node_child] {
+                    let word_bounds = (self.current_starting_index, self.slice_position + 1);
+                    // First, update our internal state, for the next time this function is called
+                    if self.slice_position + 1 >= self.ending_index {
+                        // Since we cannot step forward, we must increment the child
+                        self.current_node_child += 1;
+                    } else {
+                        // Step forward
+                        self.previous_nodes
+                            .push((self.current_node, self.current_node_child));
+                        self.current_node = next_node;
+
+                        self.slice_position += 1;
+                        self.current_node_child = if self.slice[self.slice_position] == OPEN {
+                            0
+                        } else {
+                            self.slice[self.slice_position]
+                        };
+                    }
+
+                    // Now, see if we have something to return
+                    if let Some(word_info) = &next_node.word_info {
+                        return Some((
+                            word_info.path.clone(), // TODO: Beware, clone here
+                            word_info.word_rank,
+                            word_bounds,
+                        ));
+                    }
+                }
+            }
+
+            // No valid child, check the next one
+            self.current_node_child += 1;
         }
     }
 }
@@ -158,11 +208,12 @@ impl TrieNode {
     }
 
     pub fn get_valid_words<'a>(
-        &self,
+        &'a self,
         slice: &'a [usize],
         blocked: &'a [bool],
         target_index: usize,
-    ) -> ValidWordIterator {
+    ) -> ValidWordIterator<'a> {
+        debug_assert!(slice.len() == blocked.len());
         let slice_length = slice.len();
 
         let mut previous_blocked = None;
@@ -186,28 +237,7 @@ impl TrieNode {
 
         // TODO: Add reversing logic
 
-        println!("{}, {}", start, end);
-
-        (start..=target_index.min(end - MAX_WORD)).flat_map(|starting_index| {
-            let mut previous_nodes = Vec::with_capacity(MAX_WORD);
-            let mut current_node = self;
-            let mut current_child = if slice[starting_index] == OPEN {
-                0
-            } else {
-                slice[starting_index]
-            };
-
-            let mut slice_position = starting_index;
-            let mut slice_entry = slice[slice_position];
-            loop {
-                // Check if we have exceeded the valid children of our current node
-                if current_child >= NUM_LETTERS
-                    || (slice_entry != OPEN && slice_entry != current_child)
-                {}
-            }
-        });
-
-        ValidWordIterator::new(self, slice, 0, 0)
+        ValidWordIterator::new(self, slice, start, end)
     }
 
     pub fn get_top_k_valid_words<'a>(

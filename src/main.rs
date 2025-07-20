@@ -10,27 +10,16 @@ fn main() {
     println!("{}", char_grid);
 
     let trie = trie::TrieNode::build().unwrap();
-    trie.get_top_k_valid_words(
-        &[
-            4,
-            5,
-            consts::OPEN,
-            consts::OPEN,
-            consts::OPEN,
-            0,
-            0,
-            0,
-            0,
-            0,
-        ],
-        &[
-            true, false, false, false, false, false, false, false, false, false,
-        ],
-        (&[], &[]),
-        1,
-        |_, _, _| 0.0,
-        10,
-        1_000,
-    );
-    println!("{}", trie.depth());
+    let slice = &[4, 5, consts::OPEN, consts::OPEN, consts::OPEN, 0, 0];
+    println!("{}", util::ints_to_string(slice.to_vec()).unwrap());
+    let valid_words =
+        trie.get_valid_words(slice, &[false, false, false, false, false, false, false], 4);
+
+    for (idx, (word, word_rank, (start, stop))) in valid_words.enumerate() {
+        let word_string = util::ints_to_string(word).unwrap();
+        println!("{}", word_string);
+        if idx > 10 {
+            break;
+        }
+    }
 }
