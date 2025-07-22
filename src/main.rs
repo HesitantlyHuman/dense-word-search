@@ -10,8 +10,7 @@ fn main() {
     // println!("{}", char_grid);
 
     let trie = trie::TrieNode::build().unwrap();
-    let slice = util::string_to_ints("butterflyfly").unwrap();
-    // let slice = util::string_to_ints("fly").unwrap();
-
+    let slice = util::string_to_ints("butterflyjthat").unwrap();
+    let blocked = vec![false; slice.len()];
     println!("{:?}", trie.slice_words(&slice));
 }
