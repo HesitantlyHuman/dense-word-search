@@ -130,19 +130,39 @@ impl TrieNode {
 
     // TODO: the new state machine iteration may not return things in the order that would make the overlapping work. Test this
     pub fn slice_words<'a>(&'a self, slice: &'a [usize]) -> HashSet<String> {
-        let mut words: HashSet<String> = HashSet::new();
+        let mut max_stop = vec![0; slice.len()];
+        let mut words_and_positions: Vec<(String, (usize, usize))> = Vec::new();
+        
+        for (word_info, (start, stop)) in self.get_words(slice) {
+            println!("{}, {}, {}", word_info.word, start, stop);
+            println!("{:?}", max_stop);
+            println!("{:?}", words_and_positions);
+            // Check if another word which starts at or before this index stops after this word
+            if stop <= max_stop[start] {
+                continue;
+            }
+            
+            // Remove any words which this new word would cover
+            words_and_positions.retain(|(_, (existing_start, existing_stop))|{
+                existing_start < &start || existing_stop > &stop
+            });
 
-        for (word_info, _) in self.get_words(slice) {
+            // Update our max stop
+            let max_stop_length = max_stop.len();
+            for idx in start..stop {
+                if max_stop[idx] >= stop {
+                    break;
+                }
+                max_stop[idx] = stop;
+            }
+
+            // Update our words and positions
             let word_to_add = word_info.word.clone();
-
-            // First, remove from our set any words that are contained in this word
-            words.retain(|already_collected| !word_to_add.contains(already_collected));
-
-            // Add word to our set
-            words.insert(word_to_add);
+            words_and_positions.push((word_to_add, (start, stop)));
         }
 
-        words
+        // Now collect our words
+        HashSet::from_iter(words_and_positions.iter().map(|(word, (_, _))| {word.clone()}))
     }
 
     // TODO: Maybe a different return type is more efficient?
