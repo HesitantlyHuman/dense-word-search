@@ -43,23 +43,18 @@ impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
     }
 
     #[inline]
-    pub fn set_bulk<R, C>(&mut self, rows: R, cols: C, value: T)
-    where
-        R: IntoIterator<Item = usize>,
-        C: IntoIterator<Item = usize> + Clone,
-    {
-        for r in rows {
-            debug_assert!(r < ROWS);
-            for c in cols.clone().into_iter() {
-                debug_assert!(c < COLS);
-                unsafe {
-                    let idx = Self::index_flat(r, c);
-                    *self.data.get_unchecked_mut(idx) = value;
-                }
-            }
+    pub fn set_bulk<'a>(&mut self, rows: &'a [usize], cols: &'a [usize], values: &'a [T]) {
+        debug_assert!(rows.len() == cols.len() && rows.len() == values.len());
+
+        for idx in 0..rows.len() {
+            let r = rows[idx];
+            let c = cols[idx];
+            let v = values[idx];
+            self.set(r, c, v);
         }
     }
 
+    // TODO: fix this function
     #[inline]
     pub fn get_bulk<R, C>(&self, rows: R, cols: C) -> impl Iterator<Item = &T>
     where
