@@ -1,3 +1,4 @@
+use core::slice;
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -5,9 +6,18 @@ pub struct Grid<T, const N: usize, const ROWS: usize, const COLS: usize> {
     data: [T; N],
 }
 
-impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
+const fn build_slices<'a>(rows: usize, cols: usize) -> Vec<(&'a [usize], &'a [usize])> {
+    Vec::new()
+}
+
+impl<'a, T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
     Grid<T, N, ROWS, COLS>
 {
+    const VERTICAL_SLICES: Vec<(&'static [usize], &'static [usize])> = build_slices(ROWS, COLS);
+    const HORIZONTAL_SLICES: Vec<(&'static [usize], &'static [usize])> = build_slices(ROWS, COLS);
+    // const FORWARD_SLICES: Vec<(&'a [usize], &'a [usize])> = build_slices(ROWS, COLS);
+    // const BACKWARD_SLICES: Vec<(&'a [usize], &'a [usize])> = build_slices(ROWS, COLS);
+
     #[inline]
     pub fn new() -> Self {
         Self {
@@ -21,8 +31,16 @@ impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
     }
 
     #[inline(always)]
-    fn index_flat(row: usize, col: usize) -> usize {
+    pub fn index_flat(row: usize, col: usize) -> usize {
+        debug_assert!(row < ROWS);
+        debug_assert!(col < COLS);
         row * COLS + col
+    }
+
+    #[inline(always)]
+    pub fn index_fat(idx: usize) -> (usize, usize) {
+        debug_assert!(idx < N);
+        (idx / COLS, idx % COLS)
     }
 
     #[inline]
@@ -43,7 +61,7 @@ impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
     }
 
     #[inline]
-    pub fn set_bulk<'a>(&mut self, rows: &'a [usize], cols: &'a [usize], values: &'a [T]) {
+    pub fn set_bulk<'b>(&mut self, rows: &'b [usize], cols: &'b [usize], values: &'b [T]) {
         debug_assert!(rows.len() == cols.len() && rows.len() == values.len());
 
         for idx in 0..rows.len() {
@@ -55,20 +73,20 @@ impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
     }
 
     // TODO: fix this function
-    #[inline]
-    pub fn get_bulk<R, C>(&self, rows: R, cols: C) -> impl Iterator<Item = &T>
-    where
-        R: IntoIterator<Item = usize>,
-        C: IntoIterator<Item = usize> + Clone,
-    {
-        rows.into_iter().flat_map(move |r| {
-            debug_assert!(r < ROWS);
-            cols.clone().into_iter().map(move |c| {
-                debug_assert!(c < COLS);
-                unsafe { self.data.get_unchecked(Self::index_flat(r, c)) }
-            })
-        })
-    }
+    // #[inline]
+    // pub fn get_bulk<'b>(&self, rows: &'b [usize], cols: &'b [usize]) -> Vec<&'a T> {
+    //     debug_assert!(rows.len() == cols.len());
+
+    //     let mut values = Vec::with_capacity(rows.len());
+
+    //     for idx in 0..rows.len() {
+    //         let r = rows[idx];
+    //         let c = cols[idx];
+    //         values.push(self.get(r, c));
+    //     }
+
+    //     values
+    // }
 
     pub fn map<U, F>(&self, f: F) -> Grid<U, N, ROWS, COLS>
     where
@@ -92,6 +110,25 @@ impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
             new_data[i] = f(&self.data[i])?;
         }
         Ok(Grid::<U, N, ROWS, COLS>::from_array(new_data))
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &T> {
+        self.data.iter()
+    }
+
+    pub fn indices(&self) -> impl Iterator<Item = (usize, usize)> {
+        (0..ROWS).flat_map(|row| (0..COLS).map(move |e| (row.clone(), e)))
+    }
+
+    pub fn items(&self) -> impl Iterator<Item = ((usize, usize), &T)> {
+        self.data
+            .iter()
+            .enumerate()
+            .map(|(index, element)| (Self::index_fat(index), element))
+    }
+
+    pub fn slices() -> impl Iterator<Item = &'static (&'static [usize], &'static [usize])> {
+        Self::VERTICAL_SLICES.iter()
     }
 }
 
