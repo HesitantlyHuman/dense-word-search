@@ -5,16 +5,16 @@ mod trie;
 mod util;
 
 fn main() {
-    let grid = grid::Grid::<usize, 25, 5, 5>::new();
-    let mut char_grid = grid.try_map(util::int_to_char).unwrap();
+    let mut grid = grid::Grid::<usize, 25, 5, 5>::new().map(|_| consts::OPEN);
+    let trie = trie::TrieNode::build().unwrap();
+    let blocked = grid.map(|_| false);
 
-    println!("{}", char_grid);
+    let row = util::string_to_ints("this_").unwrap();
+    grid.set_bulk(&[0, 0, 0, 0, 0], &[0, 1, 2, 3, 4], &row);
 
-    let mut slices = grid::Grid::<usize, 25, 5, 5>::slices().collect::<Vec<_>>();
-    let (rows, cols) = slices.pop().unwrap();
-    char_grid.set_bulk(rows, cols, vec!['c'; rows.len()].as_slice());
+    println!("{}", grid.try_map(util::int_to_char).unwrap());
 
-    println!("{}", char_grid);
+    generate::solve(grid, blocked, trie);
 
     // let trie = trie::TrieNode::build().unwrap();
     // let slice = util::string_to_ints("butterflyjthat").unwrap();

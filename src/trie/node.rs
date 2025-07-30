@@ -160,8 +160,7 @@ impl TrieNode {
         final_set
     }
 
-    // TODO: Maybe a different return type is more efficient?
-    pub fn slice_coverage<'a>(self, slice: &'a [usize]) -> Vec<bool> {
+    pub fn slice_coverage<'a>(&'a self, slice: &'a [usize]) -> Vec<bool> {
         let mut coverage: Vec<bool> = vec![false; slice.len()];
 
         for (_, (start, stop)) in self.get_words(slice) {

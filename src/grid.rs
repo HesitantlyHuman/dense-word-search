@@ -65,15 +65,15 @@ impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
         }
     }
 
-    // #[inline]
-    // pub fn get_bulk<'a>(
-    //     &self,
-    //     rows: &'a [usize],
-    //     cols: &'a [usize],
-    // ) -> impl Iterator<Item = &'a T> {
-    //     debug_assert!(rows.len() == cols.len());
-    //     rows.iter().zip(cols).map(move |(&r, &c)| self.get(r, c))
-    // }
+    #[inline]
+    pub fn get_bulk<'a>(
+        &'a self,
+        rows: &'a [usize],
+        cols: &'a [usize],
+    ) -> impl Iterator<Item = &'a T> {
+        debug_assert!(rows.len() == cols.len());
+        rows.iter().zip(cols).map(|(&r, &c)| self.get(r, c))
+    }
 
     pub fn map<U, F>(&self, f: F) -> Grid<U, N, ROWS, COLS>
     where
