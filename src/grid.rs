@@ -1,25 +1,18 @@
-use core::slice;
 use std::ops::{Index, IndexMut};
+
+use crate::trie::consts::MIN_WORD;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Grid<T, const N: usize, const ROWS: usize, const COLS: usize> {
     data: [T; N],
 }
 
-const fn build_slices<'a>(rows: usize, cols: usize) -> Vec<(&'a [usize], &'a [usize])> {
-    Vec::new()
-}
-
-impl<'a, T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
+impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
     Grid<T, N, ROWS, COLS>
 {
-    const VERTICAL_SLICES: Vec<(&'static [usize], &'static [usize])> = build_slices(ROWS, COLS);
-    const HORIZONTAL_SLICES: Vec<(&'static [usize], &'static [usize])> = build_slices(ROWS, COLS);
-    // const FORWARD_SLICES: Vec<(&'a [usize], &'a [usize])> = build_slices(ROWS, COLS);
-    // const BACKWARD_SLICES: Vec<(&'a [usize], &'a [usize])> = build_slices(ROWS, COLS);
-
     #[inline]
     pub fn new() -> Self {
+        debug_assert!(N == ROWS * COLS);
         Self {
             data: [T::default(); N],
         }
@@ -61,7 +54,7 @@ impl<'a, T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize
     }
 
     #[inline]
-    pub fn set_bulk<'b>(&mut self, rows: &'b [usize], cols: &'b [usize], values: &'b [T]) {
+    pub fn set_bulk<'a>(&mut self, rows: &'a [usize], cols: &'a [usize], values: &'a [T]) {
         debug_assert!(rows.len() == cols.len() && rows.len() == values.len());
 
         for idx in 0..rows.len() {
@@ -72,20 +65,14 @@ impl<'a, T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize
         }
     }
 
-    // TODO: fix this function
     // #[inline]
-    // pub fn get_bulk<'b>(&self, rows: &'b [usize], cols: &'b [usize]) -> Vec<&'a T> {
+    // pub fn get_bulk<'a>(
+    //     &self,
+    //     rows: &'a [usize],
+    //     cols: &'a [usize],
+    // ) -> impl Iterator<Item = &'a T> {
     //     debug_assert!(rows.len() == cols.len());
-
-    //     let mut values = Vec::with_capacity(rows.len());
-
-    //     for idx in 0..rows.len() {
-    //         let r = rows[idx];
-    //         let c = cols[idx];
-    //         values.push(self.get(r, c));
-    //     }
-
-    //     values
+    //     rows.iter().zip(cols).map(move |(&r, &c)| self.get(r, c))
     // }
 
     pub fn map<U, F>(&self, f: F) -> Grid<U, N, ROWS, COLS>
@@ -127,9 +114,65 @@ impl<'a, T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize
             .map(|(index, element)| (Self::index_fat(index), element))
     }
 
-    pub fn slices() -> impl Iterator<Item = &'static (&'static [usize], &'static [usize])> {
-        Self::VERTICAL_SLICES.iter()
+    pub fn slices() -> impl Iterator<Item = &'static (Vec<usize>, Vec<usize>)> {
+        static SLICES: OnceLock<Vec<(Vec<usize>, Vec<usize>)>> = OnceLock::new();
+        SLICES.get_or_init(compute_slices::<ROWS, COLS>).iter()
     }
+}
+
+fn compute_slices<const ROWS: usize, const COLS: usize>() -> Vec<(Vec<usize>, Vec<usize>)> {
+    let mut result = Vec::with_capacity(ROWS + COLS + (ROWS + COLS - 1) * 2);
+
+    // Horizontal
+    for r in 0..ROWS {
+        let rows = vec![r; COLS];
+        let cols = (0..COLS).collect();
+        result.push((rows, cols));
+    }
+
+    // Vertical
+    for c in 0..COLS {
+        let rows = (0..ROWS).collect();
+        let cols = vec![c; ROWS];
+        result.push((rows, cols));
+    }
+
+    // Diagonal ↘
+    for d in 0..(ROWS + COLS - 1) {
+        let mut rows = Vec::new();
+        let mut cols = Vec::new();
+        for r in 0..ROWS {
+            let c = d as isize - r as isize;
+            if c >= 0 && (c as usize) < COLS {
+                rows.push(r);
+                cols.push(c as usize);
+            }
+        }
+        if !rows.is_empty() {
+            result.push((rows, cols));
+        }
+    }
+
+    // Diagonal ↙
+    for d in 0..(ROWS + COLS - 1) {
+        let mut rows = Vec::new();
+        let mut cols = Vec::new();
+        for r in 0..ROWS {
+            let c = d as isize - (ROWS - 1 - r) as isize;
+            if c >= 0 && (c as usize) < COLS {
+                rows.push(r);
+                cols.push(c as usize);
+            }
+        }
+        if !rows.is_empty() {
+            result.push((rows, cols));
+        }
+    }
+
+    result
+        .into_iter()
+        .filter(|(row, _)| row.len() >= MIN_WORD)
+        .collect::<Vec<_>>()
 }
 
 // Indexing sugar
@@ -158,6 +201,7 @@ where
 }
 
 use std::fmt::{self, Display};
+use std::sync::OnceLock;
 
 impl<T, const N: usize, const ROWS: usize, const COLS: usize> Display for Grid<T, N, ROWS, COLS>
 where

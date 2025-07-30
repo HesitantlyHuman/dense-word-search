@@ -1,0 +1,84 @@
+
+Current Rankings:
+========================================
+GNDR 2040 (+9.06)  The Political Economy of Race, Class and Gender
+ANTH 3283 (+7.81)  Sex and Gender
+WRTG 3890 (+7.60)  Rhetorical and Critical Methods
+DANC 1013 (+6.63)  History of Hip-Hop
+HIST 4671 (+6.29)  American Indian History to 1850: Precontact to Indian Removal
+PSY 3245 (+6.19)  Human Sexuality in a World of Diversity
+CMP 4600 (+5.91)  The Just City
+PHYS 3375 (+5.57)  Women in Physics and Their Scientific Contributions
+GNDR 3040 (+5.52)  Psychology of Gender
+MUSC 1236 (+5.50)  Survey of Jazz
+ETHNC 2510 (+5.22)  Diversity Scholars: Land and Labor
+SCI 3900 (+4.71)  Being Human in STEM
+WRTG 4950 (+4.66)  Social Histories of Rhetoric
+DANC 1010 (+4.26)  Dance in Culture
+POLS 3190 (+4.26)  Racial and Ethnic Politics
+PSY 3040 (+4.07)  Psychology of Gender
+ECS 4111 (+3.82)  School and Society
+SOC 3380 (+3.76)  Social Inequality: Disadvantage in the Land of Opportunity
+SOC 3565 (+3.43)  Women and Crime
+ECON 2040 (+3.42)  The Political Economy of Race, Class and Gender
+HPSCI 3950 (+3.20)  History of Women in Science, Technology, and Medicine
+MGT 1030 (+3.05)  Responsibilities of Business Leaders
+SOC 3381 (+2.95)  Exploring Social Inequality through Music & Film
+WRTG 3800 (+2.88)  Everyday Rhetorics: Health, Food, and Environment
+GNDR 3573 (+2.79)  Queer Representation in Media
+PSY 3450 (+2.55)  Cross-Cultural Psychology
+GEOG 3620 (+2.17)  North America: Geography, Diversity, and Change
+HIST 4710 (+2.13)  The Concept of Race in America
+ETHNC 2560 (+1.72)  Introduction to Chicanx/Latine Studies
+GNDR 3337 (+1.62)  Sociology of Gender and Sexuality
+PHIL 3380 (+1.51)  Feminist Philosophy of Science
+ETHNC 3365 (+1.31)  Ethnic Minorities in America
+ENGL 3770 (+1.28)  Chicana/o Literature
+COMM 3070 (+1.13)  Communication and Gender
+ANTH 5255 (+0.62)  Race and Culture
+COMM 3190 (+0.44)  Intercultural Communication
+LING 2600 (+0.40)  Cross-Cultural Communication
+FCS 5180 (+0.33)  Autism Across the Lifespan
+POLS 3140 (-0.06)  Gender and Politics
+SOC 3337 (-0.12)  Sociology of Gender and Sexuality
+BIOL 1010 (-0.14)  Biology in the 21st Century
+GLOBL 1600 (-0.51)  Teaching and Learning Across Languages
+HIST 4700 (-0.70)  African American History Since 1890
+GNDR 2000 (-0.72)  Introduction to LGBTQ Studies: Finding Out
+SW 3550  (-1.39)  Social Diversity and Cultural Understanding
+ETHNC 2500 (-1.50)  Introduction to Ethnic Studies
+FCS 3290 (-1.83)  Race, Ethnicity and Family Diversity
+ETHNC 2580 (-1.84)  Introduction to Asian American Studies
+PHIL 3080 (-2.04)  Philosophical Issues in Feminism
+CRIM 3565 (-2.10)  Women and Crime
+ARTH 3070 (-2.17)  Asian American Art
+GNDR 1100 (-2.21)  Gender and Social Change
+THEA 3792 (-2.72)  Queer Theatre
+CSD 2600 (-2.76)  Serving Diverse Populations with Communication Needs
+ENGL 2610 (-3.20)  Diversity in American Literature
+ECS 3180 (-3.31)  Community-Engaged Education with Multilingual Communities
+FILM 2240 (-3.40)  Diversity in Film and Media
+PRT 3310 (-3.68)  Diversity and Inclusion in Parks, Recreation, and Tourism
+MG EN2200 (-3.80)  Utah's Mining Industry: Mines, Mining Towns and Their People
+SOC 2630 (-3.83)  Ethnic Minorities in America
+ETHNC 2570 (-3.90)  Introduction to Native American and Indigenous Studies
+CLCS 4325 (-4.00)  Hyphenated Lives: Muslim-Americans in the U.S.
+THEA 1760 (-4.03)  American Political Theatre
+ECON 5170 (-4.05)  Feminist Economics
+PHIL 3870 (-4.09)  Philosophy of Race
+H EDU5300 (-4.15)  Diversity and Health
+HONOR 2455 (-4.16)  Social Determinants of Health
+ETHNC 2550 (-4.32)  Introduction to Black Studies
+SP ED2010 (-4.89)  Human Exceptionality
+HIST 4690 (-5.66)  African American History: 1619-1890
+ETHNC 2590 (-5.66)  Introduction to Pacific Islands Studies
+UGS 3400 (-5.76)  The World of Children's Literature
+THEA 1770 (-5.78)  The American Experience Through Black Theatre
+GERON 3005 (-6.15)  Aging Across Communities & Cultures
+ED PS3010 (-6.80)  Indentity and Inclusivity
+GNDR 2500 (-7.38)  Feminist Ways of Remembering
+DISAB 3000 (-7.46)  Introduction to Disability Studies
+ANTH 3112 (-7.50)  North American Ethnography
+========================================
+
+Press Enter to return to the next comparison...^A

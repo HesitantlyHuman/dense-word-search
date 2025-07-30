@@ -37,6 +37,7 @@ fn grid_coverage(
     word_grid: Grid<usize, WORD_SEARCH_SIZE, WORD_SEARCH_HEIGHT, WORD_SEARCH_WIDTH>,
     trie: TrieNode,
 ) -> Grid<bool, WORD_SEARCH_SIZE, WORD_SEARCH_HEIGHT, WORD_SEARCH_WIDTH> {
+    // TODO: check that this initializes to false
     let mut coverage_grid =
         Grid::<bool, WORD_SEARCH_SIZE, WORD_SEARCH_HEIGHT, WORD_SEARCH_WIDTH>::new();
 
