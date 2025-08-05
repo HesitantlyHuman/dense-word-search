@@ -118,6 +118,52 @@ impl<T: Copy + Default, const N: usize, const ROWS: usize, const COLS: usize>
         static SLICES: OnceLock<Vec<(Vec<usize>, Vec<usize>)>> = OnceLock::new();
         SLICES.get_or_init(compute_slices::<ROWS, COLS>).iter()
     }
+
+    pub fn slices_at(
+        row: &usize,
+        col: &usize,
+    ) -> impl Iterator<Item = &'static ((Vec<usize>, Vec<usize>), usize)> {
+        static SLICES: OnceLock<Vec<((Vec<usize>, Vec<usize>), usize)>> = OnceLock::new();
+        SLICES
+            .get_or_init(|| compute_slices_through_point::<ROWS, COLS>(row, col))
+            .iter()
+    }
+}
+
+impl<const N: usize, const ROWS: usize, const COLS: usize> Grid<bool, N, ROWS, COLS> {
+    pub fn and(&self, other: &Self) -> Self {
+        let mut new_data = [false; N];
+        for i in 0..N {
+            new_data[i] = self.data[i] && other.data[i];
+        }
+        Self::from_array(new_data)
+    }
+
+    pub fn not(&self) -> Self {
+        let mut new_data = [false; N];
+        for i in 0..N {
+            new_data[i] = !self.data[i];
+        }
+        Self::from_array(new_data)
+    }
+
+    pub fn any(&self) -> bool {
+        for i in 0..N {
+            if self.data[i] {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn all(&self) -> bool {
+        for i in 0..N {
+            if !self.data[i] {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 fn compute_slices<const ROWS: usize, const COLS: usize>() -> Vec<(Vec<usize>, Vec<usize>)> {
@@ -173,6 +219,71 @@ fn compute_slices<const ROWS: usize, const COLS: usize>() -> Vec<(Vec<usize>, Ve
         .into_iter()
         .filter(|(row, _)| row.len() >= MIN_WORD)
         .collect::<Vec<_>>()
+}
+
+fn compute_slices_through_point<const ROWS: usize, const COLS: usize>(
+    target_row: &usize,
+    target_col: &usize,
+) -> Vec<((Vec<usize>, Vec<usize>), usize)> {
+    let mut result = Vec::with_capacity(4);
+
+    // Horizontal (same row)
+    {
+        let rows = vec![*target_row; COLS];
+        let cols: Vec<usize> = (0..COLS).collect();
+        result.push(((rows, cols), *target_col));
+    }
+
+    // Vertical (same column)
+    {
+        let rows: Vec<usize> = (0..ROWS).collect();
+        let cols = vec![*target_col; ROWS];
+        result.push(((rows, cols), *target_row));
+    }
+
+    // Diagonal ↘ (row - col == d)
+    {
+        let d = *target_row as isize - *target_col as isize;
+        let mut rows = Vec::new();
+        let mut cols = Vec::new();
+
+        // Start from the first valid r where c = r - d is in bounds
+        let r_start = d.max(0) as usize;
+        let r_end = ROWS.min((COLS as isize + d) as usize); // so that c = r - d < COLS
+
+        for r in r_start..r_end {
+            let c = (r as isize - d) as usize;
+            rows.push(r);
+            cols.push(c);
+        }
+
+        let index = target_row - r_start;
+        result.push(((rows, cols), index));
+    }
+
+    // Diagonal ↙ (row + col == d)
+    {
+        let d = target_row + target_col;
+        let mut rows = Vec::new();
+        let mut cols = Vec::new();
+
+        let r_start = d.saturating_sub(COLS - 1);
+        let r_end = ROWS.min(d + 1); // since c = d - r must be >= 0
+
+        for r in r_start..r_end {
+            let c = d - r;
+            rows.push(r);
+            cols.push(c);
+        }
+
+        let index = target_row - r_start;
+        result.push(((rows, cols), index));
+    }
+
+    result
+        .into_iter()
+        .filter(|((rows, _), _)| rows.len() >= MIN_WORD)
+        .collect()
 }
 
 // Indexing sugar

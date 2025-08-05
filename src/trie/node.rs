@@ -79,7 +79,7 @@ impl TrieNode {
         &'a self,
         slice: &'a [usize],
         blocked: &'a [bool],
-        target_index: usize,
+        target_index: &usize,
     ) -> impl Iterator<Item = (&'a WordInfo, (usize, usize))> + 'a {
         debug_assert!(slice.len() == blocked.len());
         let slice_length = slice.len();
@@ -88,7 +88,7 @@ impl TrieNode {
         let mut next_blocked = None;
         for (idx, is_blocked) in blocked.iter().enumerate() {
             if *is_blocked {
-                if idx < target_index {
+                if idx < *target_index {
                     previous_blocked = Some(idx);
                 } else if next_blocked.is_none() {
                     next_blocked = Some(idx);
@@ -105,7 +105,7 @@ impl TrieNode {
 
         // TODO: Add reversing logic
 
-        TargetedValidWordIterator::new(self, slice, target_index, start, end)
+        TargetedValidWordIterator::new(self, slice, *target_index, start, end)
     }
 
     pub fn get_words<'a>(
@@ -120,11 +120,11 @@ impl TrieNode {
         slice: &'a [usize],
         blocked: &'a [bool],
         indices: (&'a [usize], &'a [usize]),
-        target_index: usize,
+        target_index: &usize,
         scoring_function: fn((&[usize], &[usize]), f32, f32) -> f32,
-        k: u16,
-        max_words_to_check: u16,
-    ) -> Vec<(f32, Vec<u8>, (&'a [usize], &'a [usize]))> {
+        k: usize,
+        max_words_to_check: usize,
+    ) -> Vec<(f32, Vec<u8>, (Vec<usize>, Vec<usize>))> {
         Vec::new()
     }
 

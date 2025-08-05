@@ -6,8 +6,8 @@ use crate::trie::TrieNode;
 use crate::util;
 
 pub struct WordSearch<const N: usize, const ROWS: usize, const COLS: usize> {
-    word_grid: Grid<char, N, ROWS, COLS>,
-    words: HashSet<String>,
+    pub word_grid: Grid<char, N, ROWS, COLS>,
+    pub words: HashSet<String>,
 }
 
 impl<const N: usize, const ROWS: usize, const COLS: usize> WordSearch<N, ROWS, COLS> {
@@ -76,11 +76,138 @@ fn grid_words<const N: usize, const ROWS: usize, const COLS: usize>(
     words
 }
 
-fn fill_grid_backtracking<const N: usize, const ROWS: usize, const COLS: usize>(
+fn possible_to_fill<const N: usize, const ROWS: usize, const COLS: usize>(
     word_grid: &Grid<usize, N, ROWS, COLS>,
     blocked: &Grid<bool, N, ROWS, COLS>,
     trie: &TrieNode,
+    x: &usize,
+    y: &usize,
+) -> bool {
+    for ((rows, cols), target_index) in Grid::<usize, N, ROWS, COLS>::slices_at(x, y) {
+        let slice = word_grid.get_bulk(rows, cols).copied().collect::<Vec<_>>();
+        let blocked_slice = blocked.get_bulk(rows, cols).copied().collect::<Vec<_>>();
+
+        for _ in trie
+            .get_valid_words(&slice, &blocked_slice, target_index)
+            .enumerate()
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fn fill_grid_backtracking<const N: usize, const ROWS: usize, const COLS: usize>(
+    word_grid: &Grid<usize, N, ROWS, COLS>,
+    coverage: &Grid<bool, N, ROWS, COLS>,
+    blocked: &Grid<bool, N, ROWS, COLS>,
+    trie: &TrieNode,
 ) -> Option<Grid<usize, N, ROWS, COLS>> {
+    let not_covered_and_not_blocked = coverage.not().and(&blocked.not());
+
+    if !not_covered_and_not_blocked.any() {
+        return Some(word_grid.clone());
+    }
+
+    let not_covered_and_not_blocked_with_letter = word_grid
+        .map(|value| *value != OPEN)
+        .and(&not_covered_and_not_blocked);
+
+    // First, figure out which locations we will be filling
+    let candidate_locations = if not_covered_and_not_blocked_with_letter.any() {
+        not_covered_and_not_blocked_with_letter
+            .items()
+            .filter_map(|((row, col), is_not_covered_and_not_blocked)| {
+                if *is_not_covered_and_not_blocked {
+                    Some((row, col))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    } else {
+        not_covered_and_not_blocked
+            .items()
+            .filter_map(|((row, col), is_not_covered_and_not_blocked)| {
+                if *is_not_covered_and_not_blocked {
+                    Some((row, col))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    // Verify that each spot has at least one option
+    for (x, y) in &candidate_locations {
+        if !possible_to_fill(word_grid, blocked, trie, x, y) {
+            return None;
+        }
+    }
+
+    // Now consider each candidate location to find the most restricted one
+    // let open_slots = word_grid.map(|e| *e == OPEN);
+
+    const K: usize = 1000;
+    let mut best_location_options = Vec::with_capacity(K * 4);
+    let mut have_best = false;
+
+    for (x, y) in &candidate_locations {
+        let mut options_at_location = Vec::with_capacity(K * 4);
+
+        for ((rows, cols), target_index) in Grid::<usize, N, ROWS, COLS>::slices_at(x, y) {
+            let slice = word_grid.get_bulk(rows, cols).copied().collect::<Vec<_>>();
+            let blocked_slice = blocked.get_bulk(rows, cols).copied().collect::<Vec<_>>();
+
+            for (idx, (word_info, (start, stop))) in trie
+                .get_valid_words(&slice, &blocked_slice, target_index)
+                .enumerate()
+            {
+                if idx >= K {
+                    break;
+                }
+                let (word_rows, word_cols) = (&rows[start..stop], &cols[start..stop]);
+                options_at_location.push((0.0, word_info.path.clone(), (word_rows, word_cols)));
+            }
+        }
+
+        if have_best {
+            if options_at_location.len() < best_location_options.len() {
+                best_location_options = options_at_location;
+            }
+        } else {
+            best_location_options = options_at_location;
+            have_best = true;
+        }
+    }
+
+    // Now that we have a best location, we can iterate through our options there
+    for (_, word, (rows, cols)) in best_location_options {
+        // Prune branches that add words which are already in the grid
+        if coverage
+            .get_bulk(rows, cols)
+            .fold(0, |acc, e| if *e { acc } else { acc + 1 })
+            == 0
+        {
+            continue;
+        }
+
+        let mut hypothetical_grid = word_grid.clone();
+        hypothetical_grid.set_bulk(rows, cols, &word);
+        let hypothetical_coverage = grid_coverage(&hypothetical_grid, trie);
+
+        // Make sure that we haven't covered a blocked letter by accident. (If the blocked letter is an s, for example)
+        if hypothetical_coverage.and(blocked).any() {
+            continue;
+        }
+
+        match fill_grid_backtracking(&hypothetical_grid, &hypothetical_coverage, blocked, trie) {
+            Some(grid) => return Some(grid),
+            None => {}
+        }
+    }
+
     None
 }
 
@@ -129,7 +256,7 @@ pub fn solve<const N: usize, const ROWS: usize, const COLS: usize>(
         }
     }
 
-    let result = fill_grid_backtracking(&seeded_grid, &initial_coverage, &trie);
+    let result = fill_grid_backtracking(&seeded_grid, &initial_coverage, &blocked, &trie);
 
     match result {
         None => None,
