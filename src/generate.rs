@@ -149,7 +149,7 @@ fn fill_grid_backtracking<const N: usize, const ROWS: usize, const COLS: usize>(
     // Now consider each candidate location to find the most restricted one
     // let open_slots = word_grid.map(|e| *e == OPEN);
 
-    const K: usize = 1000;
+    const K: usize = 250;
     let mut best_location_options = Vec::with_capacity(K * 4);
     let mut have_best = false;
 

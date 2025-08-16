@@ -5,7 +5,7 @@ mod trie;
 mod util;
 
 fn main() {
-    let mut grid = grid::Grid::<usize, 16, 4, 4>::new().map(|_| consts::OPEN);
+    let mut grid = grid::Grid::<usize, 25, 5, 5>::new().map(|_| consts::OPEN);
     let trie = trie::TrieNode::build().unwrap();
     let mut blocked = grid.map(|_| false);
 
